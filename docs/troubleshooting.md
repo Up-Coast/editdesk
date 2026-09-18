@@ -23,10 +23,10 @@ You typed into a gap that had no text, such as the space after a link. Editdesk 
 
 ## "That spot in your source can only take plain words and punctuation"
 
-The text is part of a longer string or expression, and Editdesk cannot tell how that code is quoted. It writes only letters, numbers, spaces and these characters there: `. , ! ? ; : ( ) - – — ’ … % / @ # + * =`
+The text is part of a longer string or expression, or in a kind of file Editdesk does not know how to quote for, such as YAML or PHP. It writes only letters, numbers, spaces and a few punctuation marks there. The [command reference](reference.md#where-an-edit-is-saved) lists them. **Undo** shows this message too when the original wording contained other characters.
 
 1. Remove quotes, brackets, braces, backslashes, `&`, `$` and backticks from the new text, and save again.
-2. If you need those characters, make the change in the file. The panel shows the file and line.
+2. If you need those characters, make the change in the file.
 
 ## "The source file changed since this page loaded"
 

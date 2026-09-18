@@ -44,7 +44,7 @@ Pages rendered by an app keep their copy in source files. When the text you edit
 
 ![A panel listing two places in a strings file where the same text appears](images/choose.png)
 
-Click the right place to save there. Click **Cancel** to put the text back. Places in the app's own source are listed before its tests and documents.
+Click the right place to save there. Click **Cancel**, or start another edit, to put the text back. Places in the app's own source are listed before its tests and documents.
 
 Editdesk asks the same way before it changes text that is only part of a longer string.
 

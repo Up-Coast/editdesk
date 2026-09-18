@@ -52,13 +52,14 @@ The search accepts the spellings a character can have in source code. `Don't` on
 
 What the search does with a match depends on the code around it.
 
-| The match is                                                    | Editdesk          | New text is written as                                                                                                                                           |
-| --------------------------------------------------------------- | ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| All of a quoted string: `"…"`, `'…'` or `` `…` ``               | Saves             | The string's quote character, backslashes and newlines are escaped. In a template string, `${` is escaped                                                        |
-| All the text between two tags                                   | Saves             | `&`, `<` and `>` become entities. In `.js`, `.jsx`, `.ts`, `.tsx`, `.mjs`, `.cjs`, `.mdx`, `.vue`, `.svelte` and `.astro` files, `{` and `}` become entities too |
-| Words in a `.md`, `.markdown` or `.txt` file                    | Saves             | As typed                                                                                                                                                         |
-| Part of something longer, or an attribute value in an HTML file | Asks first        | As typed. Refused when the new text contains quotes, backslashes, brackets, braces, `&`, `$` or backticks                                                        |
-| Inside a longer word or a code identifier                       | Ignores the match |                                                                                                                                                                  |
+| The match is                                                                                                                                              | Editdesk          | New text is written as                                                                                                                                                                                                                    |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| All of a quoted string, `"…"`, `'…'` or `` `…` ``, in a `.js`, `.jsx`, `.ts`, `.tsx`, `.mjs`, `.cjs`, `.json`, `.mdx`, `.vue`, `.svelte` or `.astro` file | Saves             | The string's quote character, backslashes and newlines are escaped. In a template string, `${` is escaped                                                                                                                                 |
+| All of a quoted attribute value, such as `label="…"`, in one of those files                                                                               | Saves             | `&`, `<`, `>`, `{`, `}`, backticks, backslashes and both quote characters become entities                                                                                                                                                 |
+| All the text between two tags                                                                                                                             | Saves             | `&`, `<` and `>` become entities. In every file except `.html` and `.htm`, `{`, `}`, backticks and backslashes become entities too, so a script or template engine cannot read them as code                                               |
+| Words in a `.md`, `.markdown` or `.txt` file                                                                                                              | Saves             | As typed, except `<`, which becomes `&lt;`                                                                                                                                                                                                |
+| Part of something longer, a quoted string in any other kind of file, or an attribute value in an HTML file                                                | Asks first        | As typed. Refused when the new text contains anything other than letters, numbers, spaces and `. , ! ? ; : ( ) - – — ’ … % / @ # + * =`. In `.yaml` and `.yml` files only letters, numbers, spaces and `. , ! ? ( ) – — ’ …` are accepted |
+| Inside a longer word or a code identifier                                                                                                                 | Ignores the match |                                                                                                                                                                                                                                           |
 
 When the text matches in one place, Editdesk saves there. When it matches in several, Editdesk asks which one.
 
@@ -66,7 +67,7 @@ When the text matches in one place, Editdesk saves there. When it matches in sev
 
 Files with these extensions, up to 1 MB each: `.html` `.htm` `.js` `.jsx` `.mjs` `.cjs` `.ts` `.tsx` `.vue` `.svelte` `.astro` `.md` `.markdown` `.mdx` `.txt` `.json` `.yaml` `.yml` `.njk` `.liquid` `.hbs` `.ejs` `.erb` `.php` `.twig`
 
-These folders are never searched or written: `node_modules`, `dist`, `build`, `out`, `coverage`, `vendor`, `test-results`, and any folder whose name starts with a dot.
+A file that cannot be read is skipped. These folders are never searched or written: `node_modules`, `dist`, `build`, `out`, `coverage`, `vendor`, `test-results`, and any folder whose name starts with a dot.
 
 ## Text that cannot be edited
 
