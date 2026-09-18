@@ -1,0 +1,61 @@
+{
+  "name": "editdesk",
+  "version": "0.1.0",
+  "description": "Edit the copy on any web page in place, and save the change back to the source file. No AI involved.",
+  "keywords": [
+    "copy",
+    "copywriting",
+    "inline-editing",
+    "contenteditable",
+    "html",
+    "cli",
+    "ai-coding"
+  ],
+  "license": "MIT",
+  "author": "Abbey Jackson (https://upcoast.ca)",
+  "homepage": "https://up-coast.github.io/editdesk/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Up-Coast/editdesk.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Up-Coast/editdesk/issues"
+  },
+  "type": "module",
+  "bin": {
+    "editdesk": "bin/editdesk.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "start": "node bin/editdesk.js",
+    "test": "node --test \"tests/unit/**/*.test.js\"",
+    "test:browser": "playwright test",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --project jsconfig.json",
+    "check": "sh scripts/check.sh"
+  },
+  "dependencies": {
+    "entities": "^8.1.0",
+    "parse5": "^8.0.1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@playwright/test": "1.62.1",
+    "@types/node": "^24.0.0",
+    "eslint": "^9.0.0",
+    "globals": "^16.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.6.0"
+  }
+}

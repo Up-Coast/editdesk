@@ -1,0 +1,22 @@
+/*
+ * The only styles Editdesk adds to the page itself: outlines that show what
+ * can be edited and what is being edited. Outlines never change layout. The
+ * editor sets these attributes only in Edit mode, and only on the element
+ * under the pointer or being edited, so a framework that checks the page
+ * against its own render finds nothing unexpected.
+ */
+
+[data-editdesk-hover],
+[data-editdesk-hover] * {
+  cursor: text;
+}
+
+[data-editdesk-hover] {
+  outline: 1px dashed #2563eb;
+  outline-offset: 2px;
+}
+
+[data-editdesk-active] {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}

@@ -1,0 +1,16 @@
+#!/bin/sh
+# Runs the gate before anything leaves this machine. A push that changes only
+# documents skips it, because no check reads them.
+remote="$1"
+changed_code=0
+while read -r local_ref local_sha remote_ref remote_sha; do
+  if [ "$remote_sha" = "0000000000000000000000000000000000000000" ]; then
+    changed_code=1
+  elif git diff --name-only "$remote_sha" "$local_sha" | grep -qvE '(\.md$|^docs/|^LICENSE$)'; then
+    changed_code=1
+  fi
+done
+if [ "$changed_code" = "1" ] || [ "$EDITDESK_SCOPE" = "all" ]; then
+  exec "$(git rev-parse --show-toplevel)/scripts/check.sh"
+fi
+echo "pre-push: documents only, gate skipped"

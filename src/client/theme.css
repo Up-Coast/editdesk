@@ -1,0 +1,203 @@
+/*
+ * Editdesk's one theme file: the toolbar (inside its shadow root) and the
+ * folder listing page. Every colour, size and space is a custom property.
+ */
+
+:host,
+.editdesk-listing {
+  --editdesk-ink: #111827;
+  --editdesk-ink-soft: #4b5563;
+  --editdesk-surface: #ffffff;
+  --editdesk-surface-soft: #f3f4f6;
+  --editdesk-line: #d1d5db;
+  --editdesk-accent: #2563eb;
+  --editdesk-accent-ink: #ffffff;
+  --editdesk-radius: 8px;
+  --editdesk-gap: 8px;
+  --editdesk-font: 13px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  --editdesk-mono: 12px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace;
+  --editdesk-shadow: 0 8px 30px rgb(0 0 0 / 18%);
+}
+
+@media (prefers-color-scheme: dark) {
+  :host,
+  .editdesk-listing {
+    --editdesk-ink: #f9fafb;
+    --editdesk-ink-soft: #d1d5db;
+    --editdesk-surface: #1f2937;
+    --editdesk-surface-soft: #374151;
+    --editdesk-line: #4b5563;
+    --editdesk-accent: #60a5fa;
+    --editdesk-accent-ink: #0b1220;
+  }
+}
+
+:host {
+  all: initial;
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  z-index: 2147483647;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--editdesk-gap);
+  max-width: calc(100vw - 32px);
+  font: var(--editdesk-font);
+  color: var(--editdesk-ink);
+}
+
+.bar,
+.panel {
+  box-sizing: border-box;
+  background: var(--editdesk-surface);
+  border: 1px solid var(--editdesk-line);
+  border-radius: var(--editdesk-radius);
+  box-shadow: var(--editdesk-shadow);
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: var(--editdesk-gap);
+  padding: 6px;
+}
+
+.panel {
+  width: min(520px, calc(100vw - 32px));
+  padding: 12px;
+}
+
+.panel[hidden],
+button[hidden] {
+  display: none;
+}
+
+.panel-text {
+  margin: 0 0 var(--editdesk-gap);
+}
+
+.modes {
+  display: flex;
+  padding: 2px;
+  border-radius: var(--editdesk-radius);
+  background: var(--editdesk-surface-soft);
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  padding: 5px 10px;
+  border: 1px solid transparent;
+  border-radius: calc(var(--editdesk-radius) - 2px);
+  background: transparent;
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  background: var(--editdesk-surface-soft);
+}
+
+button:focus-visible {
+  outline: 2px solid var(--editdesk-accent);
+  outline-offset: 1px;
+}
+
+button:disabled {
+  color: var(--editdesk-ink-soft);
+  opacity: 0.5;
+  cursor: default;
+}
+
+button[aria-pressed="true"] {
+  background: var(--editdesk-accent);
+  color: var(--editdesk-accent-ink);
+}
+
+.status {
+  padding: 0 8px;
+  color: var(--editdesk-ink-soft);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.choices {
+  max-height: 34vh;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: var(--editdesk-gap);
+}
+
+.choice {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 100%;
+  text-align: left;
+  border-color: var(--editdesk-line);
+}
+
+.choice-detail {
+  font: var(--editdesk-mono);
+  color: var(--editdesk-ink-soft);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.choice-match {
+  padding: 1px 2px;
+  border-radius: 3px;
+  background: var(--editdesk-accent);
+  color: var(--editdesk-accent-ink);
+}
+
+.editdesk-listing {
+  margin: 0;
+  font: var(--editdesk-font);
+  font-size: 15px;
+  color: var(--editdesk-ink);
+  background: var(--editdesk-surface);
+}
+
+.editdesk-listing main {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 48px 24px;
+}
+
+.editdesk-listing h1 {
+  margin: 0 0 4px;
+  font-size: 22px;
+}
+
+.editdesk-listing-path,
+.editdesk-listing-empty {
+  margin: 0 0 24px;
+  color: var(--editdesk-ink-soft);
+}
+
+.editdesk-listing ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--editdesk-line);
+}
+
+.editdesk-listing li {
+  border-bottom: 1px solid var(--editdesk-line);
+}
+
+.editdesk-listing a {
+  display: block;
+  padding: 10px 4px;
+  color: var(--editdesk-accent);
+  text-decoration: none;
+}
+
+.editdesk-listing a:hover {
+  background: var(--editdesk-surface-soft);
+}

@@ -1,0 +1,8 @@
+body { font-family: Georgia, serif; margin: 0; color: #2b2118; background: #fbf6ee; }
+header { padding: 16px 32px; background: #2b2118; }
+header a { color: #fbf6ee; margin-right: 16px; }
+main { max-width: 640px; margin: 48px auto; padding: 0 24px; }
+h1 { font-size: 44px; line-height: 1.1; letter-spacing: -0.02em; text-transform: uppercase; }
+p { font-size: 19px; line-height: 1.6; }
+strong { color: #a3470f; }
+button { font: 600 16px system-ui; padding: 12px 20px; border: 0; border-radius: 999px; background: #a3470f; color: white; }

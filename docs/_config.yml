@@ -1,0 +1,14 @@
+title: Editdesk
+description: Edit the copy on any web page in place, and save the change back to the source file.
+remote_theme: just-the-docs/just-the-docs@v0.10.1
+plugins:
+  - jekyll-remote-theme
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+  collections: false
+aux_links:
+  "Editdesk on GitHub": https://github.com/Up-Coast/editdesk
+color_scheme: light
+mermaid:
+  version: "10.9.1"
