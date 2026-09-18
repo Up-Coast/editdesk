@@ -40,14 +40,16 @@ let mode = "edit";
 let session = null;
 /** @type {Element | null} */
 let hovered = null;
+/** @type {Promise<void>} */
+let lastSave = Promise.resolve();
 
 const history = createHistory(showHistory);
 
 const toolbar = createToolbar(
   {
     onModeChange: setMode,
-    onUndo: () => replay("undo"),
-    onRedo: () => replay("redo"),
+    onUndo: () => replayInTurn("undo"),
+    onRedo: () => replayInTurn("redo"),
     onCopyChanges: copyChanges,
   },
   { showsChangeList: !config.canSave },
@@ -163,7 +165,16 @@ function commitSession() {
   const changes = session.commit();
   session = null;
   toolbar.setStatus(strings.statusReady);
-  void keepChanges(changes);
+  inTurn(() => keepChanges(changes));
+}
+
+/**
+ * Runs saves, undos and redos one at a time, in the order they were asked
+ * for, so none of them acts on a file or a history another is still changing.
+ * @param {() => Promise<void>} task
+ */
+function inTurn(task) {
+  lastSave = lastSave.then(task, task);
 }
 
 /**
@@ -180,6 +191,7 @@ async function keepChanges(changes) {
         oldText: change.oldText,
         newText: change.newText,
         location: null,
+        mappedOnly: false,
       },
       change.target,
     );
@@ -235,17 +247,29 @@ async function keep(edit, target) {
 /**
  * @param {"undo" | "redo"} direction
  */
-async function replay(direction) {
+function replayInTurn(direction) {
   commitSession();
+  inTurn(() => replay(direction));
+}
+
+/**
+ * @param {"undo" | "redo"} direction
+ */
+async function replay(direction) {
   const entry = direction === "undo" ? history.peekUndo() : history.peekRedo();
   if (!entry) {
     return;
   }
   const { edit, target } = entry;
-  const step =
+  const texts =
     direction === "undo"
-      ? { ...edit, oldText: edit.newText, newText: edit.oldText }
-      : edit;
+      ? { oldText: edit.newText, newText: edit.oldText }
+      : {};
+  const step = {
+    ...edit,
+    ...texts,
+    mappedOnly: edit.element !== null && edit.location === null,
+  };
   toolbar.setStatus(strings.statusSaving);
   const outcome = await save(step);
   if (outcome.outcome !== "saved" && outcome.outcome !== "collected") {

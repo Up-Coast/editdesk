@@ -2,6 +2,9 @@
  * The few response shapes the local server sends.
  */
 
+import { open } from "node:fs/promises";
+import { messages } from "../messages.js";
+
 const NEVER_CACHE = "no-store";
 
 /**
@@ -43,4 +46,28 @@ export function sendHtml(response, html) {
     "cache-control": NEVER_CACHE,
   });
   response.end(html);
+}
+
+/**
+ * Sends a file from disk, or "not found" when it cannot be opened.
+ * @param {import("node:http").ServerResponse} response
+ * @param {string} filePath The file to send.
+ * @param {string} contentType Its Content-Type header value.
+ */
+export async function sendFile(response, filePath, contentType) {
+  let file;
+  try {
+    file = await open(filePath);
+  } catch {
+    sendText(response, 404, messages.pageNotFound);
+    return;
+  }
+  response.writeHead(200, {
+    "content-type": contentType,
+    "cache-control": NEVER_CACHE,
+  });
+  file
+    .createReadStream()
+    .on("error", () => response.destroy())
+    .pipe(response);
 }

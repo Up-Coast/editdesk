@@ -66,6 +66,8 @@ test("criterion: mistakes on the command line are explained", async (t) => {
     [["notes.txt"], /notes\.txt is not an HTML file/],
     [["--port", "99999"], /Not a valid port: 99999/],
     [["--wat"], /Unknown option: --wat/],
+    [["--port", "80", "--bogus"], /Unknown option: --bogus/],
+    [["--no-open", "--port"], /Option --port needs a value/],
     [["a.html", "b.html"], /Give one target/],
     [["index.html", "--root", "nowhere"], /--root must be a folder/],
   ];

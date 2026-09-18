@@ -126,3 +126,75 @@ test("criterion: user text is matched literally, never as a pattern", () => {
   );
   assert.deepEqual(findInSource(`const a = "Price";`, ".js", "P.ice"), []);
 });
+
+test("criterion: hyphens, slashes and every other punctuation mark in the text can be searched for", () => {
+  const source = `const a = "A well-known thing: 50/50 [ok] {x} ^$ a|b + c*?";`;
+  assert.equal(
+    edit(
+      source,
+      ".js",
+      "A well-known thing: 50/50 [ok] {x} ^$ a|b + c*?",
+      "A well-known thing",
+    ),
+    `const a = "A well-known thing";`,
+  );
+});
+
+test("criterion: an attribute value takes entities, never backslash escapes", () => {
+  assert.equal(
+    edit(
+      `<Button label="Save now" />`,
+      ".tsx",
+      "Save now",
+      `Save "now" & {go}`,
+    ),
+    `<Button label="Save &quot;now&quot; &amp; &#123;go&#125;" />`,
+  );
+  assert.equal(
+    edit(`<Card title='Save now' />`, ".vue", "Save now", `Don't`),
+    `<Card title='Don&apos;t' />`,
+  );
+});
+
+test("criterion: quoted text outside JavaScript and JSON is not assumed to use JavaScript escapes", () => {
+  for (const [source, extension] of [
+    [`title: 'Hello there'`, ".yml"],
+    [`$title = 'Hello there';`, ".php"],
+    [`{% set title = 'Hello there' %}`, ".njk"],
+  ]) {
+    const [match] = findInSource(source, extension, "Hello there");
+    assert.equal(match.context.kind, "partial", extension);
+    assert.equal(canWrite(match.context, "Don't go"), false, extension);
+  }
+});
+
+test("criterion: characters that mean something in YAML cannot be written into a YAML file", () => {
+  const [match] = findInSource(`title: Hello world`, ".yaml", "Hello world");
+  assert.equal(canWrite(match.context, "Hello #1: x"), false);
+  assert.equal(canWrite(match.context, "Hello, world!"), true);
+});
+
+test("criterion: code that merely sits between two strings is not treated as a string", () => {
+  const [match] = findInSource(`const list = ['alpha', 'beta'];`, ".js", ",");
+  assert.equal(match.context.kind, "partial");
+});
+
+test("criterion: text typed into markup inside a script or template cannot become code", () => {
+  assert.equal(
+    edit(
+      "const t = `<p>Hello</p>`;",
+      ".js",
+      "Hello",
+      "Hi ` + process.exit() + ` ${x} \\",
+    ),
+    "const t = `<p>Hi &#96; + process.exit() + &#96; $&#123;x&#125; &#92;</p>`;",
+  );
+  assert.equal(
+    edit(`<p>Hello</p>`, ".njk", "Hello", "{{ secret }} {% raw %}"),
+    `<p>&#123;&#123; secret &#125;&#125; &#123;% raw %&#125;</p>`,
+  );
+  assert.equal(
+    edit("Some words here.\n", ".md", "words", "<script>alert(1)</script>"),
+    "Some &lt;script>alert(1)&lt;/script> here.\n",
+  );
+});

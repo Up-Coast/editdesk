@@ -296,3 +296,34 @@ test("criterion: double-clicking a word selects it for replacement, in one gestu
     (await site.original("index.html")).replace(">About</a>", ">Story</a>"),
   );
 });
+
+test("criterion: pressing Undo twice in a row never touches a file the edit was not in", async ({
+  page,
+}) => {
+  await editAtEnd(page.locator("#headline"));
+  await page.keyboard.type("!");
+  await page.keyboard.press("Enter");
+  await expect(status(page)).toHaveText(/Saved/);
+  await page
+    .locator("editdesk-toolbar")
+    .getByRole("button", { name: "Undo" })
+    .dblclick();
+  await expect(status(page)).toHaveText("Undone");
+  await expect(page.locator("#headline")).toHaveText(
+    "Fresh bread, baked every morning",
+  );
+  expect(await site.read("index.html")).toBe(await site.original("index.html"));
+  expect(await site.read("app.js")).toBe(await site.original("app.js"));
+});
+
+test("criterion: the keyboard undo shortcut undoes typing inside bold text", async ({
+  page,
+}) => {
+  await editAtEnd(page.locator("#intro strong"));
+  await page.keyboard.type("s");
+  await page.locator("#intro strong").evaluate((element) => {
+    getSelection()?.selectAllChildren(element);
+  });
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(page.locator("#intro strong")).toHaveText("by hand");
+});

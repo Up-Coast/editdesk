@@ -67,7 +67,9 @@ export function encodeHtmlText(text) {
 
 /**
  * Rewrites raw HTML text so it shows `newText`, changing only the part that
- * differs from what it shows now.
+ * differs from what it shows now. When keeping the original spelling would
+ * change what the text shows (a bare `&` joining typed letters into an
+ * entity), the whole run is encoded afresh.
  * @param {string} raw Raw source between two tags.
  * @param {string} newText The text it should show.
  * @returns {string} The rewritten raw source.
@@ -83,7 +85,10 @@ export function rewriteHtmlText(raw, newText) {
     kept.startTextLength,
     newText.length - kept.endTextLength,
   );
-  return kept.startRaw + encodeHtmlText(middle) + kept.endRaw;
+  const rewritten = kept.startRaw + encodeHtmlText(middle) + kept.endRaw;
+  return decodeHtmlText(rewritten) === newText
+    ? rewritten
+    : encodeHtmlText(newText);
 }
 
 /**

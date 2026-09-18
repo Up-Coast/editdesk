@@ -168,3 +168,27 @@ test("criterion: emoji and other wide characters survive an edit beside them", (
   );
   assert.equal(rewriteHtmlText(raw, "Launch 🎉 today"), "Launch 🎉 today");
 });
+
+test("criterion: an ampersand that was left bare never joins typed text to form an entity", () => {
+  assert.equal(decodeHtmlText(rewriteHtmlText("A & B", "A &lt B")), "A &lt B");
+  assert.equal(decodeHtmlText(rewriteHtmlText("& copy;", "&copy;")), "&copy;");
+});
+
+test("criterion: a file that starts with a byte-order mark is mapped and served correctly", () => {
+  const source =
+    "\uFEFF<!doctype html><html><head></head><body><h1>Hi</h1></body></html>";
+  const served = annotateHtml(source, "<!--e-->");
+  assert.ok(
+    served.startsWith("\uFEFF<!doctype html>") &&
+      served.includes("<head><!--e-->"),
+  );
+  assert.equal(
+    rewriteSlot(source, slotShowing(source, "Hi"), "Hello"),
+    source.replace("Hi", "Hello"),
+  );
+  assert.ok(
+    injectIntoHead("\uFEFF<!doctype html><p>x</p>", "<!--e-->").startsWith(
+      "\uFEFF<!doctype html><!--e-->",
+    ),
+  );
+});

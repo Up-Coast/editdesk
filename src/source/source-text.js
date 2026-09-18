@@ -35,18 +35,21 @@ const ALTERNATIVE_SPELLINGS = {
 
 const QUOTES = new Set(['"', "'", "`"]);
 
-const MARKUP_WITH_EXPRESSIONS = new Set([
+const EXTENSIONS_WITH_JAVASCRIPT_STRINGS = new Set([
   ".js",
   ".jsx",
   ".ts",
   ".tsx",
   ".mjs",
   ".cjs",
+  ".json",
   ".mdx",
   ".vue",
   ".svelte",
   ".astro",
 ]);
+
+const YAML_EXTENSIONS = new Set([".yaml", ".yml"]);
 
 const PROSE_EXTENSIONS = new Set([".md", ".markdown", ".txt"]);
 
@@ -54,15 +57,20 @@ const HTML_EXTENSIONS = new Set([".html", ".htm"]);
 
 const SAFE_IN_ANY_CONTEXT = /^[\p{L}\p{N} .,!?;:()\-–—’…%/@#+*=]*$/u;
 
+const SAFE_IN_YAML = /^[\p{L}\p{N} .,!?()\u2013\u2014\u2019\u2026]*$/u;
+
 const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
 
 /**
  * How the text around a match is written.
- * - `string`: the whole of a quoted string; `quote` is its delimiter.
- * - `markup`: the whole text between two tags.
+ * - `string`: the whole of a quoted JavaScript or JSON string; `quote` is its delimiter.
+ * - `attribute`: the whole of a quoted attribute value; `quote` is its delimiter.
+ * - `markup`: the whole text between two tags; `expressions` is true when the
+ *   file is not plain HTML, so braces and backticks could be read as code.
  * - `prose`: words in a Markdown or plain-text file.
- * - `partial`: part of something larger; needs a person to confirm.
- * @typedef {{ kind: "string", quote: string } | { kind: "markup", expressions: boolean } | { kind: "prose" } | { kind: "partial" }} SourceContext
+ * - `partial`: part of something larger, or quoted in a language Editdesk does
+ *   not encode for; needs a person to confirm. `yaml` narrows what may be written.
+ * @typedef {{ kind: "string", quote: string } | { kind: "attribute", quote: string } | { kind: "markup", expressions: boolean } | { kind: "prose" } | { kind: "partial", yaml: boolean }} SourceContext
  */
 
 /**
@@ -121,7 +129,10 @@ export function findInSource(source, extension, text) {
  * @returns {boolean} False when the characters cannot be written there with certainty.
  */
 export function canWrite(context, newText) {
-  return context.kind === "partial" ? SAFE_IN_ANY_CONTEXT.test(newText) : true;
+  if (context.kind !== "partial") {
+    return true;
+  }
+  return (context.yaml ? SAFE_IN_YAML : SAFE_IN_ANY_CONTEXT).test(newText);
 }
 
 /**
@@ -194,17 +205,37 @@ export function encodeForContext(text, context) {
       .replaceAll("\n", "\\n");
     return context.quote === "`" ? escaped.replaceAll("${", "\\${") : escaped;
   }
+  if (context.kind === "attribute") {
+    return encodeMarkup(text, true)
+      .replaceAll('"', "&quot;")
+      .replaceAll("'", "&apos;");
+  }
   if (context.kind === "markup") {
-    const escaped = text
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll("\u00a0", "&nbsp;");
-    return context.expressions
-      ? escaped.replaceAll("{", "&#123;").replaceAll("}", "&#125;")
-      : escaped;
+    return encodeMarkup(text, context.expressions);
+  }
+  if (context.kind === "prose") {
+    return text.replaceAll("<", "&lt;");
   }
   return text;
+}
+
+/**
+ * @param {string} text
+ * @param {boolean} expressions Also encode what a script or template engine would read as code.
+ */
+function encodeMarkup(text, expressions) {
+  const escaped = text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll("\u00a0", "&nbsp;");
+  return expressions
+    ? escaped
+        .replaceAll("{", "&#123;")
+        .replaceAll("}", "&#125;")
+        .replaceAll("`", "&#96;")
+        .replaceAll("\\", "&#92;")
+    : escaped;
 }
 
 /**
@@ -222,7 +253,7 @@ function spellingsPattern(character) {
  * @param {string} literal
  */
 function escapeForPattern(literal) {
-  return literal.replaceAll(/[.*+?^${}()|[\]\\/-]/g, "\\$&");
+  return literal.replaceAll(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 /**
@@ -235,26 +266,41 @@ function escapeForPattern(literal) {
 function classifyContext(source, extension, start, end) {
   if (PROSE_EXTENSIONS.has(extension)) {
     return touchesWord(source, start, end)
-      ? { kind: "partial" }
+      ? { kind: "partial", yaml: false }
       : { kind: "prose" };
   }
-  const before = source[start - 1];
-  if (
-    QUOTES.has(before) &&
-    source[end] === before &&
-    !HTML_EXTENSIONS.has(extension)
-  ) {
-    return { kind: "string", quote: before };
+  const quote = source[start - 1];
+  const isWholeQuoted =
+    QUOTES.has(quote) && source[end] === quote && opensQuote(source, start - 1);
+  if (isWholeQuoted && EXTENSIONS_WITH_JAVASCRIPT_STRINGS.has(extension)) {
+    return source[start - 2] === "="
+      ? { kind: "attribute", quote }
+      : { kind: "string", quote };
   }
   const previous = source.slice(0, start).trimEnd().at(-1);
   const next = source.slice(end).trimStart()[0];
   if (previous === ">" && next === "<") {
-    return {
-      kind: "markup",
-      expressions: MARKUP_WITH_EXPRESSIONS.has(extension),
-    };
+    return { kind: "markup", expressions: !HTML_EXTENSIONS.has(extension) };
   }
-  return { kind: "partial" };
+  return { kind: "partial", yaml: YAML_EXTENSIONS.has(extension) };
+}
+
+/**
+ * Says whether the quote at an offset opens a string: an odd number of that
+ * quote, unescaped, stands on its line up to and including it.
+ * @param {string} source
+ * @param {number} quoteOffset
+ */
+function opensQuote(source, quoteOffset) {
+  const quote = source[quoteOffset];
+  const lineStart = source.lastIndexOf("\n", quoteOffset) + 1;
+  let count = 0;
+  for (let offset = lineStart; offset <= quoteOffset; offset += 1) {
+    if (source[offset] === quote && source[offset - 1] !== "\\") {
+      count += 1;
+    }
+  }
+  return count % 2 === 1;
 }
 
 /**

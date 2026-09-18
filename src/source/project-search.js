@@ -87,13 +87,28 @@ export async function searchProject(root, text, files) {
   /** @type {ProjectMatch[]} */
   const matches = [];
   for (const file of files ?? (await listSourceFiles(root))) {
-    const source = await readFile(path.join(root, file), "utf8");
+    const source = await readIfPossible(path.join(root, file));
+    if (source === null) {
+      continue;
+    }
     const extension = path.extname(file).toLowerCase();
     for (const match of findInSource(source, extension, text)) {
       matches.push({ ...match, file, ...describePlace(source, match) });
     }
   }
   return matches;
+}
+
+/**
+ * @param {string} filePath
+ * @returns {Promise<string | null>} The contents, or null for a file this user may not read.
+ */
+async function readIfPossible(filePath) {
+  try {
+    return await readFile(filePath, "utf8");
+  } catch {
+    return null;
+  }
 }
 
 /**

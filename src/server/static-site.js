@@ -2,14 +2,13 @@
  * Serving a folder of files, with every HTML page made editable.
  */
 
-import { createReadStream } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { annotateHtml } from "../source/html-document.js";
 import { messages } from "../messages.js";
 import { contentTypeFor, isHtmlFile } from "./content-types.js";
 import { buildListingPage } from "./listing-page.js";
-import { sendHtml, sendText } from "./responses.js";
+import { sendFile, sendHtml, sendText } from "./responses.js";
 import { resolveInsideRoot } from "./security.js";
 
 const INDEX_PAGE = "index.html";
@@ -86,11 +85,7 @@ export function createStaticSite({ root, headSnippet }) {
       sendHtml(response, annotateHtml(source, headSnippet));
       return;
     }
-    response.writeHead(200, {
-      "content-type": contentTypeFor(target.path),
-      "cache-control": "no-store",
-    });
-    createReadStream(target.path).pipe(response);
+    await sendFile(response, target.path, contentTypeFor(target.path));
   }
 
   return { handle, resolvePageFile };

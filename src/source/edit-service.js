@@ -31,6 +31,7 @@ const PATHS_LISTED_LAST =
  * @property {string} oldText The slot's text before the edit.
  * @property {string} newText The slot's text after the edit.
  * @property {{ file: string, start: number } | null} location A place the person picked, or where an earlier edit landed.
+ * @property {boolean} mappedOnly True when the edit replays one that was saved to the page's own file, so it must land there or nowhere.
  */
 
 /**
@@ -73,6 +74,9 @@ export function createEditService({ root, resolvePageFile }) {
    */
   async function applyEditNow(request) {
     const mapped = await applyToMappedSlot(request);
+    if (mapped === null && request.mappedOnly) {
+      return { outcome: "refused", reason: "changed-on-disk" };
+    }
     return mapped ?? applyBySearch(request);
   }
 
@@ -209,7 +213,7 @@ export function parseEditRequest(body) {
   if (typeof body !== "object" || body === null) {
     return null;
   }
-  const { page, element, slot, oldText, newText, location } =
+  const { page, element, slot, oldText, newText, location, mappedOnly } =
     /** @type {Record<string, unknown>} */ (body);
   const isText = (/** @type {unknown} */ value) =>
     typeof value === "string" && value.length <= LONGEST_TEXT;
@@ -226,6 +230,7 @@ export function parseEditRequest(body) {
     !isIndex(slot) ||
     !isText(oldText) ||
     !isText(newText) ||
+    typeof mappedOnly !== "boolean" ||
     !locationIsValid
   ) {
     return null;
@@ -236,6 +241,7 @@ export function parseEditRequest(body) {
     slot,
     oldText,
     newText,
+    mappedOnly,
     location: location === null ? null : { ...location },
   });
 }

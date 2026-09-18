@@ -2,13 +2,12 @@
  * Serving the in-page editor, and the snippet that loads it into a page.
  */
 
-import { createReadStream } from "node:fs";
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { contentTypeFor } from "./content-types.js";
 import { messages } from "../messages.js";
-import { sendText } from "./responses.js";
+import { sendFile, sendText } from "./responses.js";
 
 /** The URL prefix of everything the server adds to a site. */
 export const EDITDESK_PREFIX = "/__editdesk/";
@@ -55,11 +54,11 @@ export async function createEditorAssetHandler() {
       sendText(response, 404, messages.pageNotFound);
       return true;
     }
-    response.writeHead(200, {
-      "content-type": contentTypeFor(name),
-      "cache-control": "no-store",
-    });
-    createReadStream(path.join(CLIENT_FOLDER, name)).pipe(response);
+    void sendFile(
+      response,
+      path.join(CLIENT_FOLDER, name),
+      contentTypeFor(name),
+    );
     return true;
   };
 }

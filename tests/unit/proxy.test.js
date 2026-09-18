@@ -160,3 +160,20 @@ test("criterion: live-reload WebSocket connections pass through", async (t) => {
   const [echo] = await once(socket, "data");
   assert.equal(String(echo), "echo:ping");
 });
+
+test("criterion: a WebSocket connection opened by another site is refused", async (t) => {
+  const { upstream, url } = await startUpstream(t, () => {});
+  let reached = false;
+  upstream.on("upgrade", (request, socket) => {
+    reached = true;
+    socket.destroy();
+  });
+  const proxy = await startProxy(t, url);
+  const socket = net.connect(proxy.port, "127.0.0.1");
+  await once(socket, "connect");
+  socket.write(
+    `GET / HTTP/1.1\r\nHost: localhost:${proxy.port}\r\nOrigin: https://attacker.example\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n`,
+  );
+  await once(socket, "close");
+  assert.equal(reached, false);
+});

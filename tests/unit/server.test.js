@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import http from "node:http";
-import { symlink } from "node:fs/promises";
+import { chmod, symlink } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 import { startServer } from "../../src/server/server.js";
@@ -134,6 +134,7 @@ test("criterion: an edit is accepted only with this run's token, from this origi
     oldText: "Old words",
     newText: "New words",
     location: null,
+    mappedOnly: false,
   });
   const send = (/** @type {Record<string, string>} */ headers) =>
     request(
@@ -192,4 +193,14 @@ test("criterion: the editor's own files are served, and only those", async (t) =
     headers: { host: `localhost:${server.port}` },
   });
   assert.equal(outside.status, 404);
+});
+
+test("criterion: a file that cannot be read gives an error page and the server keeps running", async (t) => {
+  const { project, server } = await serve(t, {
+    "index.html": PAGE,
+    "locked.css": "h1 {}",
+  });
+  await chmod(path.join(project.root, "locked.css"), 0o000);
+  assert.equal((await fetch(`${server.url}/locked.css`)).status, 404);
+  assert.equal((await fetch(server.url)).status, 200);
 });

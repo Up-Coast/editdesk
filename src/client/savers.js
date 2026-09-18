@@ -12,6 +12,7 @@
  * @property {string} oldText
  * @property {string} newText
  * @property {{ file: string, start: number } | null} location
+ * @property {boolean} mappedOnly True when replaying an edit that was saved to the page's own file.
  */
 
 /**

@@ -13,6 +13,8 @@ import { decodeHtmlText, rewriteHtmlText } from "./html-text.js";
 /** The attribute that carries an element's number in the served copy. */
 export const ELEMENT_ATTRIBUTE = "data-editdesk-el";
 
+const BYTE_ORDER_MARK = "\uFEFF";
+
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
 const ELEMENTS_WITHOUT_EDITABLE_TEXT = new Set([
@@ -52,11 +54,24 @@ const ELEMENTS_WITHOUT_EDITABLE_TEXT = new Set([
  * @returns {HtmlDescription} The elements in document order.
  */
 export function describeHtml(source) {
-  const document = parse(source, { sourceCodeLocationInfo: true });
+  const markLength = source.startsWith(BYTE_ORDER_MARK) ? 1 : 0;
+  const markup = source.slice(markLength);
+  const document = parse(markup, { sourceCodeLocationInfo: true });
   /** @type {SourceElement[]} */
   const elements = [];
-  collectElements(document, source, elements);
-  return { elements, headOffset: findHeadOffset(document) };
+  collectElements(document, markup, elements);
+  return {
+    elements: elements.map((element) => ({
+      id: element.id,
+      attributeOffset: element.attributeOffset + markLength,
+      slots: element.slots.map((slot) => ({
+        start: slot.start + markLength,
+        end: slot.end + markLength,
+        text: slot.text,
+      })),
+    })),
+    headOffset: findHeadOffset(document) + markLength,
+  };
 }
 
 /**
@@ -83,9 +98,8 @@ export function annotateHtml(source, headSnippet) {
  * @returns {string} The page with the snippet added.
  */
 export function injectIntoHead(source, headSnippet) {
-  const document = parse(source, { sourceCodeLocationInfo: true });
   return insertAll(source, [
-    { offset: findHeadOffset(document), text: headSnippet },
+    { offset: describeHtml(source).headOffset, text: headSnippet },
   ]);
 }
 

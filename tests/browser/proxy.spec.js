@@ -153,3 +153,23 @@ test("criterion: on a site with nowhere to save, edits are collected into a chan
   expect(await app.readStrings()).toBe(STRINGS);
   await app.stop();
 });
+
+test("criterion: a question left unanswered puts its text back when another edit starts", async ({
+  page,
+}) => {
+  const app = await startApp(true);
+  await page.goto(app.url);
+  await editAtEnd(page.locator("#nav"));
+  await page.keyboard.type(" home");
+  await page.keyboard.press("Enter");
+  await expect(
+    page.locator("editdesk-toolbar").getByRole("alertdialog"),
+  ).toContainText("more than one place");
+  await page.locator("#headline").click();
+  await expect(page.locator("#nav")).toHaveText("Dashboard");
+  await expect(
+    page.locator("editdesk-toolbar").getByRole("alertdialog"),
+  ).toBeHidden();
+  expect(await app.readStrings()).toBe(STRINGS);
+  await app.stop();
+});

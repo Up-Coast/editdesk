@@ -11,7 +11,12 @@ import { createApiHandler, EDIT_ENDPOINT, TOKEN_HEADER } from "./api.js";
 import { buildHeadSnippet, createEditorAssetHandler } from "./editor-assets.js";
 import { createProxySite } from "./proxy-site.js";
 import { sendText } from "./responses.js";
-import { createToken, isOwnHost, LOOPBACK_ADDRESS } from "./security.js";
+import {
+  createToken,
+  isOwnHost,
+  isOwnOrigin,
+  LOOPBACK_ADDRESS,
+} from "./security.js";
 import { createStaticSite } from "./static-site.js";
 
 /**
@@ -94,7 +99,11 @@ export async function startServer({
   /** @type {Set<import("node:stream").Duplex>} */
   const upgradedSockets = new Set();
   server.on("upgrade", (request, socket, head) => {
-    if (proxySite && isOwnHost(request.headers.host, listeningPort)) {
+    if (
+      proxySite &&
+      isOwnHost(request.headers.host, listeningPort) &&
+      isOwnOrigin(request.headers.origin, listeningPort)
+    ) {
       upgradedSockets.add(socket);
       socket.once("close", () => upgradedSockets.delete(socket));
       proxySite.handleUpgrade(request, socket, head);

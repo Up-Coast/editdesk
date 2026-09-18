@@ -44,7 +44,7 @@ export async function readInvocation(argv, currentFolder) {
     root: null,
     startPath: "/",
     port: readPort(values.port),
-    openBrowser: values.open !== false && !values["no-open"],
+    openBrowser: !values["no-open"],
   };
   if (invocation.action !== "serve") {
     return invocation;
@@ -97,14 +97,14 @@ function parseCommandLine(argv) {
         root: { type: "string" },
         port: { type: "string" },
         "no-open": { type: "boolean" },
-        open: { type: "boolean" },
         version: { type: "boolean", short: "v" },
         help: { type: "boolean", short: "h" },
       },
     });
   } catch (error) {
     const code = /** @type {{ code?: string }} */ (error).code;
-    const option = argv.find((argument) => argument.startsWith("-")) ?? "";
+    const message = /** @type {Error} */ (error).message;
+    const option = message.match(/'(-{1,2}[^' ]+)/)?.[1] ?? "";
     throw new UsageError(
       code === "ERR_PARSE_ARGS_INVALID_OPTION_VALUE"
         ? messages.missingValue(option)

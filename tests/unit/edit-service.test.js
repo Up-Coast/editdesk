@@ -48,6 +48,7 @@ function edit(fields) {
     oldText: "",
     newText: "",
     location: null,
+    mappedOnly: false,
     ...fields,
   };
 }
@@ -332,4 +333,43 @@ test("criterion: when choosing, the app's source is listed before its tests and 
       "tests/home.spec.ts",
     ],
   );
+});
+
+test("criterion: replaying an edit of a page's own file never falls through to other files", async (t) => {
+  const { project, service } = await setUp({
+    "index.html": PAGE,
+    "other.js": `export const t = "Welcome back";\n`,
+  });
+  t.after(project.remove);
+  const undo = edit({
+    element: numberOf(PAGE, "Welcome"),
+    oldText: "Welcome back",
+    newText: "Welcome",
+    mappedOnly: true,
+  });
+  assert.deepEqual(await service.applyEdit(undo), {
+    outcome: "refused",
+    reason: "changed-on-disk",
+  });
+  assert.equal(
+    await project.read("other.js"),
+    `export const t = "Welcome back";\n`,
+  );
+});
+
+test("criterion: a source file that cannot be read is skipped, not fatal", async (t) => {
+  const { project, service } = await setUp({
+    "locked.js": `const a = "Find me";\n`,
+    "open.js": `const b = "Find me";\n`,
+  });
+  t.after(async () => {
+    await chmod(path.join(project.root, "locked.js"), 0o644);
+    await project.remove();
+  });
+  await chmod(path.join(project.root, "locked.js"), 0o000);
+  const outcome = await service.applyEdit(
+    edit({ oldText: "Find me", newText: "Found" }),
+  );
+  assert.equal(outcome.outcome, "saved");
+  assert.equal(await project.read("open.js"), `const b = "Found";\n`);
 });

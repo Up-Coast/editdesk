@@ -245,7 +245,9 @@ function affectedRanges(event) {
  */
 function replaceWholeInlineTextByHand(event, ranges, host) {
   const node =
-    event.cancelable && ranges.length === 1 ? wholeTextNodeIn(ranges[0]) : null;
+    event.cancelable && changesText(event) && ranges.length === 1
+      ? wholeTextNodeIn(ranges[0])
+      : null;
   if (!node || node.parentNode === host) {
     return false;
   }
@@ -269,10 +271,12 @@ function insertAtInlineEdgeByHand(event, ranges, host) {
   const text = insertedText(event);
   const isAtEdge =
     event.cancelable &&
+    event.inputType.startsWith("insert") &&
     ranges.length === 1 &&
     range.collapsed &&
     node instanceof Text &&
     node.parentNode !== host &&
+    node.parentElement?.closest("a") !== null &&
     (range.startOffset === 0 || range.startOffset === node.length);
   if (!isAtEdge || text === "") {
     return;
@@ -281,6 +285,17 @@ function insertAtInlineEdgeByHand(event, ranges, host) {
   node.insertData(range.startOffset, text);
   getSelection()?.collapse(node, range.startOffset + text.length);
   host.dispatchEvent(new InputEvent("input", { bubbles: true }));
+}
+
+/**
+ * Says whether an input inserts or deletes text, as opposed to undoing,
+ * redoing or moving it.
+ * @param {InputEvent} event
+ */
+function changesText(event) {
+  return (
+    event.inputType.startsWith("insert") || event.inputType.startsWith("delete")
+  );
 }
 
 /**

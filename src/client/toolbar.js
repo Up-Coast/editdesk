@@ -77,9 +77,19 @@ function buildToolbar(root, actions, options) {
   bar.append(modes, undoButton, redoButton, copyButton, status);
   root.append(panel, bar);
 
+  /** @type {(() => void) | null} */
+  let cancelOpenQuestion = null;
+
+  /**
+   * Closes the panel. A question still open in it is answered "cancel", so
+   * text waiting on that answer is never left on the page unsaved.
+   */
   function closePanel() {
+    const cancel = cancelOpenQuestion;
+    cancelOpenQuestion = null;
     panel.hidden = true;
     panel.replaceChildren();
+    cancel?.();
   }
 
   return {
@@ -101,6 +111,7 @@ function buildToolbar(root, actions, options) {
     },
     /** @param {string} message */
     showProblem(message) {
+      closePanel();
       const text = element("p", "panel-text");
       text.textContent = message;
       panel.replaceChildren(text, button(strings.close, closePanel));
@@ -112,11 +123,14 @@ function buildToolbar(root, actions, options) {
      * @param {() => void} onCancel
      */
     showChoices(question, choices, onCancel) {
+      closePanel();
+      cancelOpenQuestion = onCancel;
       const text = element("p", "panel-text");
       text.textContent = question;
       const list = element("div", "choices");
       for (const choice of choices) {
         const choiceButton = button(choice.label, () => {
+          cancelOpenQuestion = null;
           closePanel();
           choice.choose();
         });
@@ -128,10 +142,7 @@ function buildToolbar(root, actions, options) {
         choiceButton.append(detail);
         list.append(choiceButton);
       }
-      const cancelButton = button(strings.cancel, () => {
-        closePanel();
-        onCancel();
-      });
+      const cancelButton = button(strings.cancel, closePanel);
       panel.replaceChildren(text, list, cancelButton);
       panel.hidden = false;
     },
