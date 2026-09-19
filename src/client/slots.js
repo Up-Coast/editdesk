@@ -35,6 +35,29 @@ export function breakCharacterOf(node) {
 }
 
 /**
+ * Removes line breaks from the end of a piece of slot text. A break with
+ * nothing after it shows nothing on the page.
+ * @param {string} text
+ * @returns {string}
+ */
+export function dropTrailingLineBreaks(text) {
+  let end = text.length;
+  while (end > 0 && text[end - 1] === lineBreak) {
+    end -= 1;
+  }
+  return text.slice(0, end);
+}
+
+/**
+ * Says whether a piece of slot text holds a paragraph break.
+ * @param {string} text
+ * @returns {boolean}
+ */
+export function hasParagraphBreak(text) {
+  return text.includes(paragraphBreak);
+}
+
+/**
  * Says whether a node divides an element's text into slots.
  * @param {Node} node
  * @returns {boolean} True for comments and for elements that are not breaks.

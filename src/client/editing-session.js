@@ -11,6 +11,7 @@ import {
   breakCharacterOf,
   captureTree,
   createParagraphMarker,
+  dropTrailingLineBreaks,
   isDivider,
   listDividers,
   readSlots,
@@ -222,11 +223,16 @@ export function startEditingSession(
         if (!element.isConnected) {
           continue;
         }
-        readSlots(element).forEach((text, slot) => {
+        readSlots(element).forEach((text, slot, slotsNow) => {
           const oldText = slots[slot] ?? "";
-          const newText = oldText.includes(NO_BREAK_SPACE)
+          const spaced = oldText.includes(NO_BREAK_SPACE)
             ? text
             : text.replaceAll(NO_BREAK_SPACE, " ");
+          const endsTheElement = slot === slotsNow.length - 1;
+          const newText =
+            endsTheElement && dropTrailingLineBreaks(oldText) === oldText
+              ? dropTrailingLineBreaks(spaced)
+              : spaced;
           if (newText !== text) {
             writeSlot(element, slot, newText);
           }

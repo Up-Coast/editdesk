@@ -12,6 +12,8 @@ import { LINE_BREAK } from "./breaks.js";
 
 const SOURCE_WHITESPACE = /[ \t\r\n\f]+/;
 
+const LINE_BREAK_AS_A_WORD = new RegExp(`(${LINE_BREAK})`);
+
 /** @type {Record<string, string[]>} */
 const ALTERNATIVE_SPELLINGS = {
   "'": ["'", "\\'", "&apos;", "&#39;", "&#x27;"],
@@ -82,25 +84,38 @@ const WORD_CHARACTER = /[\p{L}\p{N}_]/u;
  */
 
 /**
- * Splits text into words the way source code wraps it.
+ * Splits text into words the way source code wraps it. A line break is a word
+ * of its own, because source code spells it as a tag or an escape that can
+ * sit against its neighbours with or without whitespace.
  * @param {string} text On-screen text.
  * @returns {string[]} Its words; empty for blank text.
  */
 export function splitWords(text) {
-  return text.split(SOURCE_WHITESPACE).filter((word) => word !== "");
+  return text
+    .split(SOURCE_WHITESPACE)
+    .flatMap((chunk) => chunk.split(LINE_BREAK_AS_A_WORD))
+    .filter((word) => word !== "");
 }
 
 /**
  * Builds the pattern that finds on-screen text in source code, whatever the
- * line wrapping and whichever spelling special characters were given.
+ * line wrapping and whichever spelling special characters were given. Every
+ * word and every gap between words is a capture group, so a match can be
+ * taken apart again exactly.
  * @param {string} text On-screen text; must contain at least one word.
  * @returns {RegExp} A global pattern.
  */
 export function buildSearchPattern(text) {
-  const words = splitWords(text).map((word) =>
-    [...word].map(spellingsPattern).join(""),
-  );
-  return new RegExp(words.join("[ \\t\\r\\n\\f]+"), "gu");
+  const words = splitWords(text);
+  const pieces = words.map((word, index) => {
+    const wordPattern = `(${[...word].map(spellingsPattern).join("")})`;
+    if (index === 0) {
+      return wordPattern;
+    }
+    const gap = separatorBetween(words[index - 1], word) === "" ? "*" : "+";
+    return `([ \\t\\r\\n\\f]${gap})${wordPattern}`;
+  });
+  return new RegExp(pieces.join(""), "gu");
 }
 
 /**
@@ -151,14 +166,19 @@ export function whyNotWritable(context, newText, keepsLineBreaks) {
  * @param {SourceMatch} match A match from {@link findInSource} on this source.
  * @param {string} oldText The on-screen text that was searched for.
  * @param {string} newText The on-screen text to show instead.
- * @returns {string} The file's new contents.
+ * @returns {string | null} The file's new contents, or null when the match no longer reads as the old text.
  */
 export function rewriteMatch(source, match, oldText, newText) {
-  const rawPieces = source
-    .slice(match.start, match.end)
-    .split(/([ \t\r\n\f]+)/);
   const oldWords = splitWords(oldText);
   const newWords = splitWords(newText);
+  const taken = new RegExp(
+    `^(?:${buildSearchPattern(oldText).source})$`,
+    "u",
+  ).exec(source.slice(match.start, match.end));
+  if (taken === null) {
+    return null;
+  }
+  const rawPieces = taken.slice(1);
 
   let sharedStart = 0;
   while (
@@ -181,23 +201,57 @@ export function rewriteMatch(source, match, oldText, newText) {
     sharedEnd === 0
       ? []
       : rawPieces.slice(rawPieces.length - (sharedEnd * 2 - 1));
-  const middle = newWords
-    .slice(sharedStart, newWords.length - sharedEnd)
-    .map((word) => encodeForContext(word, match.context));
+  const middleWords = newWords.slice(sharedStart, newWords.length - sharedEnd);
+  const middle = middleWords
+    .map(
+      (word, index) =>
+        (index === 0 ? "" : separatorBetween(middleWords[index - 1], word)) +
+        encodeForContext(word, match.context),
+    )
+    .join("");
 
-  const separatorBefore = rawPieces[sharedStart * 2 - 1] ?? " ";
-  const separatorAfter = rawPieces[rawPieces.length - sharedEnd * 2] ?? " ";
+  /**
+   * The gap to write where kept source meets new words: the gap the source
+   * already had there, when the words on both sides of it are still the same
+   * kind (word or line break), or the usual gap otherwise.
+   * @param {number} newLeft Index into the new words of the word before the gap.
+   * @param {number} oldLeft Index into the old words of the word before the source's gap.
+   */
+  const gapAt = (newLeft, oldLeft) => {
+    const usual = separatorBetween(newWords[newLeft], newWords[newLeft + 1]);
+    const usualBefore = separatorBetween(
+      oldWords[oldLeft],
+      oldWords[oldLeft + 1],
+    );
+    const rawGap = rawPieces[oldLeft * 2 + 1];
+    return rawGap === undefined || usual !== usualBefore ? usual : rawGap;
+  };
+
   const parts = [keptStart.join("")];
-  if (middle.length > 0) {
-    parts.push(keptStart.length > 0 ? separatorBefore : "", middle.join(" "));
+  let written = sharedStart;
+  if (middleWords.length > 0) {
+    parts.push(written > 0 ? gapAt(written - 1, sharedStart - 1) : "", middle);
+    written += middleWords.length;
   }
   if (keptEnd.length > 0) {
-    const needsSeparator = keptStart.length > 0 || middle.length > 0;
-    parts.push(needsSeparator ? separatorAfter : "", keptEnd.join(""));
+    parts.push(
+      written > 0 ? gapAt(written - 1, oldWords.length - sharedEnd - 1) : "",
+      keptEnd.join(""),
+    );
   }
   return (
     source.slice(0, match.start) + parts.join("") + source.slice(match.end)
   );
+}
+
+/**
+ * Returns what goes between two neighbouring words: a space, or nothing when
+ * either of them is a line break.
+ * @param {string} left
+ * @param {string} right
+ */
+function separatorBetween(left, right) {
+  return left === LINE_BREAK || right === LINE_BREAK ? "" : " ";
 }
 
 /**

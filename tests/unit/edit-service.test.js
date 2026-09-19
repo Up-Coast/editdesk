@@ -462,3 +462,24 @@ test("criterion: a line break in JSX text is written as a br element", async (t)
     `<h1>Build<br />better apps</h1>\n`,
   );
 });
+
+test("criterion: an edit beside a line break that leaves the break alone does not count as a change of structure", async (t) => {
+  const { project, service } = await setUp({
+    "Hero.tsx": `<h1>Build<br />better apps</h1>\n`,
+  });
+  t.after(project.remove);
+  const wording = await service.applyEdit(
+    edit({
+      oldText: "Build\u2028better apps",
+      newText: "Build\u2028greater apps",
+    }),
+  );
+  assert.ok(wording.outcome === "saved");
+  assert.equal(wording.changedStructure, false);
+  const removal = await service.applyEdit(
+    edit({ oldText: "Build\u2028greater apps", newText: "Build greater apps" }),
+  );
+  assert.ok(removal.outcome === "saved");
+  assert.equal(removal.changedStructure, true);
+  assert.equal(await project.read("Hero.tsx"), `<h1>Build greater apps</h1>\n`);
+});

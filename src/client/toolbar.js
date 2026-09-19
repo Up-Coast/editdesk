@@ -16,6 +16,7 @@ export const TOOLBAR_ELEMENT = "editdesk-toolbar";
  * @property {() => void} onUndo
  * @property {() => void} onRedo
  * @property {() => void} onCopyChanges
+ * @property {() => void} onPanelClosed Called after the panel closes, whatever closed it.
  */
 
 /**
@@ -90,6 +91,7 @@ function buildToolbar(root, actions, options) {
     panel.hidden = true;
     panel.replaceChildren();
     cancel?.();
+    actions.onPanelClosed();
   }
 
   return {
@@ -147,6 +149,8 @@ function buildToolbar(root, actions, options) {
       panel.hidden = false;
     },
     closePanel,
+    /** @returns {boolean} True while the panel is showing a question or a problem. */
+    isPanelOpen: () => !panel.hidden,
   };
 }
 

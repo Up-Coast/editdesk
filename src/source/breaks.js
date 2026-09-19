@@ -14,10 +14,15 @@ export const LINE_BREAK = " ";
 export const PARAGRAPH_BREAK = " ";
 
 /**
- * Says whether a piece of text holds a line or paragraph break.
+ * Returns the breaks of a piece of text, in order, without the words. Two
+ * texts with the same breaks have the same structure.
  * @param {string} text
- * @returns {boolean}
+ * @returns {string}
  */
-export function hasBreak(text) {
-  return text.includes(LINE_BREAK) || text.includes(PARAGRAPH_BREAK);
+export function breaksIn(text) {
+  return [...text]
+    .filter(
+      (character) => character === LINE_BREAK || character === PARAGRAPH_BREAK,
+    )
+    .join("");
 }

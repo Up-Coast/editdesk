@@ -15,7 +15,9 @@ import {
 function edit(source, extension, oldText, newText) {
   const matches = findInSource(source, extension, oldText);
   assert.equal(matches.length, 1, "expected exactly one match");
-  return rewriteMatch(source, matches[0], oldText, newText);
+  const rewritten = rewriteMatch(source, matches[0], oldText, newText);
+  assert.ok(rewritten !== null, "the match reads as the old text");
+  return rewritten;
 }
 
 test("criterion: a whole string in a strings file is rewritten in place", () => {
@@ -209,5 +211,60 @@ test("criterion: text typed into markup inside a script or template cannot becom
   assert.equal(
     edit("Some words here.\n", ".md", "words", "<script>alert(1)</script>"),
     "Some &lt;script>alert(1)&lt;/script> here.\n",
+  );
+});
+
+test("criterion: text beside an existing line break is edited without disturbing the break, however it is spelled", () => {
+  assert.equal(
+    edit(
+      `<p>One two<br />three four</p>`,
+      ".jsx",
+      "One two\u2028three four",
+      "Uno two\u2028three four",
+    ),
+    `<p>Uno two<br />three four</p>`,
+  );
+  assert.equal(
+    edit(
+      `<p>Hello<br />World end</p>`,
+      ".jsx",
+      "Hello\u2028World end",
+      "Hello\u2028World finish",
+    ),
+    `<p>Hello<br />World finish</p>`,
+  );
+  assert.equal(
+    edit(
+      `const s = "One\\nTwo three";`,
+      ".ts",
+      "One\u2028Two three",
+      "One\u2028Two four",
+    ),
+    `const s = "One\\nTwo four";`,
+  );
+  assert.equal(
+    edit(`<p>One <br> two</p>`, ".html", "One \u2028 two", "One \u2028 too"),
+    `<p>One <br> too</p>`,
+  );
+});
+
+test("criterion: a line break can be added to and removed from searched text", () => {
+  assert.equal(
+    edit(
+      `<h1>Build better apps</h1>`,
+      ".tsx",
+      "Build better apps",
+      "Build\u2028better apps",
+    ),
+    `<h1>Build<br />better apps</h1>`,
+  );
+  assert.equal(
+    edit(
+      `<h1>Build<br />better apps</h1>`,
+      ".tsx",
+      "Build\u2028better apps",
+      "Build better apps",
+    ),
+    `<h1>Build better apps</h1>`,
   );
 });

@@ -16,7 +16,7 @@ import path from "node:path";
 import { replaceFileContents } from "./atomic-write.js";
 import { describeHtml, rewriteSlot } from "./html-document.js";
 import { listSourceFiles, searchProject } from "./project-search.js";
-import { hasBreak, LINE_BREAK, PARAGRAPH_BREAK } from "./breaks.js";
+import { breaksIn, LINE_BREAK, PARAGRAPH_BREAK } from "./breaks.js";
 import { rewriteMatch, splitWords, whyNotWritable } from "./source-text.js";
 
 const LONGEST_TEXT = 100_000;
@@ -116,7 +116,7 @@ export function createEditService({ root, resolvePageFile }) {
   async function save({ file, before, after, line, location, request }) {
     await replaceFileContents(path.join(root, file), after);
     const changedStructure =
-      hasBreak(request.oldText) || hasBreak(request.newText);
+      breaksIn(request.oldText) !== breaksIn(request.newText);
     const remembered = {
       id: nextId,
       file,
@@ -285,10 +285,14 @@ export function createEditService({ root, resolvePageFile }) {
       return { outcome: "refused", reason };
     }
     const source = await readFile(path.join(root, match.file), "utf8");
+    const after = rewriteMatch(source, match, request.oldText, request.newText);
+    if (after === null) {
+      return { outcome: "refused", reason: "changed-on-disk" };
+    }
     return save({
       file: match.file,
       before: source,
-      after: rewriteMatch(source, match, request.oldText, request.newText),
+      after,
       line: match.line,
       location: { file: match.file, start: match.start },
       request,

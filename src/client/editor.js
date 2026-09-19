@@ -7,7 +7,7 @@ import { formatChangeList, summarizeChanges } from "./change-list.js";
 import { readConfig } from "./config.js";
 import { findEditableHost, startEditingSession } from "./editing-session.js";
 import { createCollectingKeeper, createSourceKeeper } from "./keepers.js";
-import { writeSlot } from "./slots.js";
+import { hasParagraphBreak, writeSlot } from "./slots.js";
 import { strings } from "./strings.js";
 import { createToolbar, TOOLBAR_ELEMENT } from "./toolbar.js";
 
@@ -54,6 +54,8 @@ let session = null;
 let hovered = null;
 /** @type {Promise<void>} */
 let lastSave = Promise.resolve();
+/** @type {string | null} The status to show after loading the page again, once the file no longer matches it. */
+let statusOnceReloaded = null;
 
 const toolbar = createToolbar(
   {
@@ -61,6 +63,7 @@ const toolbar = createToolbar(
     onUndo: () => replayInTurn("undo"),
     onRedo: () => replayInTurn("redo"),
     onCopyChanges: copyChanges,
+    onPanelClosed: reloadIfStale,
   },
   { showsChangeList: !config.canSave },
 );
@@ -200,14 +203,14 @@ function commitSession() {
  * @param {() => Promise<void>} task
  */
 function inTurn(task) {
-  lastSave = lastSave.then(task, task);
+  lastSave = lastSave.then(task, task).then(reloadIfStale);
 }
 
 /**
  * @param {import("./editing-session.js").SlotChange[]} changes
  */
 async function keepChanges(changes) {
-  for (const change of changes) {
+  for (const change of inSavingOrder(changes)) {
     const number = change.target.getAttribute(config.elementAttribute);
     const keepsLineBreaks = WHITE_SPACE_THAT_KEEPS_LINE_BREAKS.has(
       getComputedStyle(change.target).whiteSpace,
@@ -229,6 +232,18 @@ async function keepChanges(changes) {
       change.target,
     );
   }
+}
+
+/**
+ * Orders a session's changes so that none of them moves the place another is
+ * aimed at. Splitting a paragraph renumbers the elements and slots after the
+ * split, so splits go last, and the later split goes first.
+ * @param {import("./editing-session.js").SlotChange[]} changes In document order.
+ */
+function inSavingOrder(changes) {
+  const splits = changes.filter((change) => hasParagraphBreak(change.newText));
+  const others = changes.filter((change) => !splits.includes(change));
+  return [...others, ...splits.reverse()];
 }
 
 /**
@@ -324,23 +339,32 @@ async function replay(direction) {
 /**
  * Shows that an edit was kept. When the file's elements no longer match the
  * page's (a paragraph was split or joined, or an app's source gained or lost
- * a line break), the page is loaded again first, so the two agree.
+ * a line break), the page is marked to be loaded again, so the two agree.
  * @param {import("./keepers.js").KeptOutcome} outcome
  * @param {import("./keepers.js").Edit} edit
  * @param {string} status
  */
 function showKept(outcome, edit, status) {
   const splitsParagraph =
-    edit.oldText.includes(config.paragraphBreak) ||
-    edit.newText.includes(config.paragraphBreak);
+    hasParagraphBreak(edit.oldText) || hasParagraphBreak(edit.newText);
   const pageIsStale =
     outcome.outcome === "saved" &&
     outcome.changedStructure &&
     (splitsParagraph || outcome.location !== null);
   if (pageIsStale) {
-    reloadShowing(status);
-  } else {
-    toolbar.setStatus(status);
+    statusOnceReloaded = status;
+  }
+  toolbar.setStatus(status);
+}
+
+/**
+ * Loads the page again when a kept edit left it out of step with the file.
+ * Waits while the panel is open: a question's answer is another edit to keep,
+ * and a problem must be read before it disappears.
+ */
+function reloadIfStale() {
+  if (statusOnceReloaded !== null && !toolbar.isPanelOpen()) {
+    reloadShowing(statusOnceReloaded);
   }
 }
 

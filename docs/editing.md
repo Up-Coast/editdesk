@@ -38,7 +38,7 @@ What is written depends on where the text lives:
 - **In a page's own HTML file**, a new line is a `<br>` tag. A new paragraph splits a `<p>` or `<li>` in two. The second one gets the same class and other attributes, without the `id`. In any other element, such as a heading or a button, a new paragraph is two new lines
 - **In an app's source**, a new line in text between tags is a `<br />` tag. A new line in a string is `\n`, and is saved only when the page shows line breaks in that text (the element's `white-space` style is `pre`, `pre-wrap`, `pre-line` or `break-spaces`). Otherwise the line break would not appear, so Editdesk puts the text back and says so. A new paragraph is two new lines
 
-The spaces on either side of a new line are removed. After a paragraph is split or joined, and after a new line is saved to an app's source, the page loads again so it matches the file.
+The spaces on either side of a new line are removed. A new line at the very end of a text shows nothing on the page, so it is not saved. After a paragraph is split or joined, and after a new line is saved to an app's source, the page loads again so it matches the file.
 
 ## Undo and redo
 

@@ -249,3 +249,23 @@ test("criterion: a file that starts with a byte-order mark is mapped and served 
     ),
   );
 });
+
+test("criterion: splitting a paragraph removes only its real id attribute", () => {
+  for (const [startTag, copied] of [
+    [`<p title="the id = 5" class="x">`, `<p title="the id = 5" class="x">`],
+    [`<p data-x="a id=b" id="one" class="c">`, `<p data-x="a id=b" class="c">`],
+    [`<p ID=top data-id="keep">`, `<p data-id="keep">`],
+  ]) {
+    const source = `${startTag}Hello world</p>`;
+    const paragraph = describeHtml(source).elements[0];
+    assert.equal(
+      rewriteSlot(
+        source,
+        paragraph.slots[0],
+        "Hello\u2029world",
+        paragraph.paragraphBreak,
+      ),
+      `${startTag}Hello</p>\n${copied}world</p>`,
+    );
+  }
+});

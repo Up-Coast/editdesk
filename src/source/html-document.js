@@ -18,8 +18,6 @@ const BYTE_ORDER_MARK = "\uFEFF";
 
 const ELEMENTS_THAT_SPLIT_INTO_PARAGRAPHS = new Set(["p", "li"]);
 
-const ID_ATTRIBUTE = /\s+id\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/i;
-
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
 const ELEMENTS_WITHOUT_EDITABLE_TEXT = new Set([
@@ -223,9 +221,11 @@ function paragraphBreakFor(element, source) {
   const lineStart = source.lastIndexOf("\n", startOffset - 1) + 1;
   const beforeTag = source.slice(lineStart, startOffset);
   const indentation = beforeTag.trim() === "" ? `\n${beforeTag}` : "";
-  const startTag = source
-    .slice(startOffset, endOffset)
-    .replace(ID_ATTRIBUTE, "");
+  const id = element.sourceCodeLocation.attrs?.id;
+  const startTag = id
+    ? source.slice(startOffset, id.startOffset).trimEnd() +
+      source.slice(id.endOffset, endOffset)
+    : source.slice(startOffset, endOffset);
   return `</${element.tagName}>${indentation}${startTag}`;
 }
 

@@ -414,3 +414,51 @@ test("criterion: Backspace removes a line break that was already in the file", a
     '<p id="address">1 Harbour Road, Tofino</p>',
   );
 });
+
+test("criterion: a new line that was added and then deleted leaves no stray break in the file", async ({
+  page,
+}) => {
+  await editAtEnd(page.locator("#about-text"));
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("x");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.type("!");
+  await page.keyboard.press("Enter");
+  await expect(status(page)).toHaveText(/Saved/);
+  expect(await site.read("index.html")).toContain("One very old oven.!</p>");
+});
+
+test("criterion: a new line at the very end with nothing after it is not saved", async ({
+  page,
+}) => {
+  await editAtEnd(page.locator("#about-text"));
+  await page.keyboard.type("!");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.press("Enter");
+  await expect(status(page)).toHaveText(/Saved/);
+  expect(await site.read("index.html")).toContain("One very old oven.!</p>");
+});
+
+test("criterion: a paragraph split and another change made in the same edit are both saved", async ({
+  page,
+}) => {
+  await page.locator("#intro").click();
+  await page.locator("#intro").evaluate((element) => {
+    const last = /** @type {Text} */ (element.lastChild);
+    getSelection()?.collapse(last, last.data.indexOf("."));
+  });
+  await page.keyboard.type(" every day");
+  await page.locator("#intro").evaluate((element) => {
+    const first = /** @type {Text} */ (element.firstChild);
+    getSelection()?.collapse(first, first.data.indexOf("Everything"));
+  });
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.press("Enter");
+  await expect(status(page)).toHaveText(/Saved to index\.html/);
+  const saved = await site.read("index.html");
+  expect(saved).toContain("on the harbour.</p>\n      <p>Everything is made");
+  expect(saved).toContain(">shows</a> every day.");
+  await expect(page.locator("main p").first()).toHaveText(/harbour\.$/);
+});
