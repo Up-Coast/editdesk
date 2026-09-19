@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Added
+
+- **Editdesk is on npm.** Run `npm install --global editdesk`, or try it with `npx editdesk page.html`. If you installed from GitHub, this replaces that copy.
+
 ## 0.2.0 — 2026-09-18
 
 New lines and paragraphs, a fuller undo, and an install page.

@@ -13,7 +13,7 @@ Editdesk needs [Node.js](https://nodejs.org) 20.19 or newer.
 1. Install the `editdesk` command:
 
    ```bash
-   npm install --global github:Up-Coast/editdesk
+   npm install --global editdesk
    ```
 
 2. Check it:
@@ -22,7 +22,7 @@ Editdesk needs [Node.js](https://nodejs.org) 20.19 or newer.
    editdesk --version
    ```
 
-To try it without installing, run `npx github:Up-Coast/editdesk page.html`. The [install page](docs/install.md) covers updating and removing it.
+To try it without installing, run `npx editdesk page.html`. The [install page](docs/install.md) covers updating and removing it.
 
 ### Working offline
 
