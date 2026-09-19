@@ -6,6 +6,9 @@
  * Otherwise the old text is searched for across the project's source files.
  * The service never guesses: text it cannot place with certainty is reported
  * back, not written.
+ *
+ * It also remembers what each saved edit did to its file, so Undo and Redo
+ * put whole file contents back and work for every kind of edit.
  */
 
 import { readFile } from "node:fs/promises";
@@ -13,11 +16,14 @@ import path from "node:path";
 import { replaceFileContents } from "./atomic-write.js";
 import { describeHtml, rewriteSlot } from "./html-document.js";
 import { listSourceFiles, searchProject } from "./project-search.js";
-import { canWrite, rewriteMatch, splitWords } from "./source-text.js";
+import { hasBreak, LINE_BREAK, PARAGRAPH_BREAK } from "./breaks.js";
+import { rewriteMatch, splitWords, whyNotWritable } from "./source-text.js";
 
 const LONGEST_TEXT = 100_000;
 
 const MOST_CANDIDATES = 20;
+
+const MOST_REMEMBERED_EDITS = 200;
 
 const PATHS_LISTED_LAST =
   /(^|\/)(tests?|__tests__|docs?|examples?|fixtures)\/|\.(test|spec)\.[^/]+$/;
@@ -31,7 +37,7 @@ const PATHS_LISTED_LAST =
  * @property {string} oldText The slot's text before the edit.
  * @property {string} newText The slot's text after the edit.
  * @property {{ file: string, start: number } | null} location A place the person picked, or where an earlier edit landed.
- * @property {boolean} mappedOnly True when the edit replays one that was saved to the page's own file, so it must land there or nowhere.
+ * @property {boolean} keepsLineBreaks True when the page shows the line breaks of the text in the edited element.
  */
 
 /**
@@ -40,11 +46,28 @@ const PATHS_LISTED_LAST =
  */
 
 /**
- * What happened to an edit.
- * @typedef {{ outcome: "saved", file: string, line: number, location: { file: string, start: number } | null }
+ * Whether there is anything to undo or redo.
+ * @typedef {{ canUndo: boolean, canRedo: boolean }} HistoryState
+ */
+
+/**
+ * A saved change to a file. `id` names the edit; `changedStructure` is true
+ * when it added or removed a line or paragraph break, so the page's elements
+ * no longer match the ones the browser holds.
+ * @typedef {{ outcome: "saved", id: number, file: string, line: number, location: { file: string, start: number } | null, changedStructure: boolean, history: HistoryState }} SavedOutcome
+ */
+
+/**
+ * What happened to an edit, an undo or a redo.
+ * @typedef {SavedOutcome
  *   | { outcome: "choose", reason: "several" | "confirm", candidates: Candidate[] }
  *   | { outcome: "not-found" }
- *   | { outcome: "refused", reason: "unsafe-characters" | "changed-on-disk" | "empty-text" }} EditOutcome
+ *   | { outcome: "nothing-to-replay" }
+ *   | { outcome: "refused", reason: "unsafe-characters" | "line-break-not-shown" | "changed-on-disk" | "empty-text" }} EditOutcome
+ */
+
+/**
+ * @typedef {{ id: number, file: string, line: number, location: { file: string, start: number } | null, changedStructure: boolean, before: string, after: string }} RememberedEdit
  */
 
 /**
@@ -52,20 +75,104 @@ const PATHS_LISTED_LAST =
  * @param {object} options
  * @param {string} options.root The project folder; nothing outside it is read or written.
  * @param {(page: string) => Promise<string | null>} options.resolvePageFile Returns the HTML file behind a page path, relative to the root, or null.
- * @returns {{ applyEdit: (request: EditRequest) => Promise<EditOutcome> }}
+ * @returns {{ applyEdit: (request: EditRequest) => Promise<EditOutcome>, undo: () => Promise<EditOutcome>, redo: () => Promise<EditOutcome>, historyState: () => HistoryState }}
  */
 export function createEditService({ root, resolvePageFile }) {
   /** @type {Promise<unknown>} */
   let lastEdit = Promise.resolve();
+  /** @type {RememberedEdit[]} */
+  const done = [];
+  /** @type {RememberedEdit[]} */
+  const undone = [];
+  let nextId = 1;
+
+  const historyState = () => ({
+    canUndo: done.length > 0,
+    canRedo: undone.length > 0,
+  });
 
   /**
-   * @param {EditRequest} request
+   * Runs one file-changing task after the ones before it have finished.
+   * @param {() => Promise<EditOutcome>} task
    * @returns {Promise<EditOutcome>}
    */
-  function applyEdit(request) {
-    const result = lastEdit.then(() => applyEditNow(request));
+  function inTurn(task) {
+    const result = lastEdit.then(task);
     lastEdit = result.catch(() => {});
     return result;
+  }
+
+  /**
+   * Writes a file and remembers what it held before and after.
+   * @param {object} change
+   * @param {string} change.file
+   * @param {string} change.before
+   * @param {string} change.after
+   * @param {number} change.line
+   * @param {{ file: string, start: number } | null} change.location
+   * @param {EditRequest} change.request
+   * @returns {Promise<SavedOutcome>}
+   */
+  async function save({ file, before, after, line, location, request }) {
+    await replaceFileContents(path.join(root, file), after);
+    const changedStructure =
+      hasBreak(request.oldText) || hasBreak(request.newText);
+    const remembered = {
+      id: nextId,
+      file,
+      line,
+      location,
+      changedStructure,
+      before,
+      after,
+    };
+    nextId += 1;
+    done.push(remembered);
+    done.splice(0, done.length - MOST_REMEMBERED_EDITS);
+    undone.length = 0;
+    return describeSaved(remembered);
+  }
+
+  /**
+   * @param {RememberedEdit} remembered
+   * @returns {SavedOutcome}
+   */
+  function describeSaved({ id, file, line, location, changedStructure }) {
+    return {
+      outcome: "saved",
+      id,
+      file,
+      line,
+      location,
+      changedStructure,
+      history: historyState(),
+    };
+  }
+
+  /**
+   * Moves the newest edit from one list to the other, writing the file
+   * contents it should now hold. Refuses when the file is not as the edit
+   * left it.
+   * @param {RememberedEdit[]} from
+   * @param {RememberedEdit[]} to
+   * @param {"before" | "after"} expected Which contents the file should hold now.
+   * @param {"before" | "after"} wanted Which contents to write.
+   * @returns {Promise<EditOutcome>}
+   */
+  async function replay(from, to, expected, wanted) {
+    const remembered = from.at(-1);
+    if (!remembered) {
+      return { outcome: "nothing-to-replay" };
+    }
+    const absolutePath = path.join(root, remembered.file);
+    const current = await readFile(absolutePath, "utf8").catch(() => null);
+    if (current !== remembered[expected]) {
+      return { outcome: "refused", reason: "changed-on-disk" };
+    }
+    await replaceFileContents(absolutePath, remembered[wanted]);
+    from.pop();
+    to.push(remembered);
+    return describeSaved(remembered);
   }
 
   /**
@@ -74,9 +181,6 @@ export function createEditService({ root, resolvePageFile }) {
    */
   async function applyEditNow(request) {
     const mapped = await applyToMappedSlot(request);
-    if (mapped === null && request.mappedOnly) {
-      return { outcome: "refused", reason: "changed-on-disk" };
-    }
     return mapped ?? applyBySearch(request);
   }
 
@@ -92,30 +196,34 @@ export function createEditService({ root, resolvePageFile }) {
     if (file === null) {
       return null;
     }
-    const absolutePath = path.join(root, file);
-    const source = await readFile(absolutePath, "utf8");
-    const slot =
-      describeHtml(source).elements[request.element]?.slots[request.slot];
+    const source = await readFile(path.join(root, file), "utf8");
+    const element = describeHtml(source).elements[request.element];
+    const slot = element?.slots[request.slot];
     if (slot?.text !== request.oldText) {
       return null;
     }
-    await replaceFileContents(
-      absolutePath,
-      rewriteSlot(source, slot, request.newText),
-    );
-    return {
-      outcome: "saved",
+    return save({
       file,
+      before: source,
+      after: rewriteSlot(source, slot, request.newText, element.paragraphBreak),
       line: lineAt(source, slot.start),
       location: null,
-    };
+      request,
+    });
   }
 
   /**
-   * @param {EditRequest} request
+   * @param {EditRequest} givenRequest A paragraph break has no meaning outside a page's own HTML file, so it is written as two line breaks.
    * @returns {Promise<EditOutcome>}
    */
-  async function applyBySearch(request) {
+  async function applyBySearch(givenRequest) {
+    const request = {
+      ...givenRequest,
+      newText: givenRequest.newText.replaceAll(
+        PARAGRAPH_BREAK,
+        LINE_BREAK + LINE_BREAK,
+      ),
+    };
     if (splitWords(request.oldText).length === 0) {
       return { outcome: "not-found" };
     }
@@ -168,24 +276,31 @@ export function createEditService({ root, resolvePageFile }) {
    * @returns {Promise<EditOutcome>}
    */
   async function writeMatch(match, request) {
-    if (!canWrite(match.context, request.newText)) {
-      return { outcome: "refused", reason: "unsafe-characters" };
-    }
-    const absolutePath = path.join(root, match.file);
-    const source = await readFile(absolutePath, "utf8");
-    await replaceFileContents(
-      absolutePath,
-      rewriteMatch(source, match, request.oldText, request.newText),
+    const reason = whyNotWritable(
+      match.context,
+      request.newText,
+      request.keepsLineBreaks,
     );
-    return {
-      outcome: "saved",
+    if (reason !== null) {
+      return { outcome: "refused", reason };
+    }
+    const source = await readFile(path.join(root, match.file), "utf8");
+    return save({
       file: match.file,
+      before: source,
+      after: rewriteMatch(source, match, request.oldText, request.newText),
       line: match.line,
       location: { file: match.file, start: match.start },
-    };
+      request,
+    });
   }
 
-  return { applyEdit };
+  return {
+    applyEdit: (request) => inTurn(() => applyEditNow(request)),
+    undo: () => inTurn(() => replay(done, undone, "after", "before")),
+    redo: () => inTurn(() => replay(undone, done, "before", "after")),
+    historyState,
+  };
 }
 
 /**
@@ -213,7 +328,7 @@ export function parseEditRequest(body) {
   if (typeof body !== "object" || body === null) {
     return null;
   }
-  const { page, element, slot, oldText, newText, location, mappedOnly } =
+  const { page, element, slot, oldText, newText, location, keepsLineBreaks } =
     /** @type {Record<string, unknown>} */ (body);
   const isText = (/** @type {unknown} */ value) =>
     typeof value === "string" && value.length <= LONGEST_TEXT;
@@ -230,7 +345,7 @@ export function parseEditRequest(body) {
     !isIndex(slot) ||
     !isText(oldText) ||
     !isText(newText) ||
-    typeof mappedOnly !== "boolean" ||
+    typeof keepsLineBreaks !== "boolean" ||
     !locationIsValid
   ) {
     return null;
@@ -241,7 +356,7 @@ export function parseEditRequest(body) {
     slot,
     oldText,
     newText,
-    mappedOnly,
+    keepsLineBreaks,
     location: location === null ? null : { ...location },
   });
 }

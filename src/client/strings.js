@@ -15,7 +15,7 @@ export const strings = {
 
   statusReady: "Click any text to edit it",
   statusBrowsing: "Browsing",
-  statusEditing: "Enter to save · Esc to cancel",
+  statusEditing: "Enter to save · Shift+Enter for a new line · Esc to cancel",
   statusSaving: "Saving…",
   /** @param {string} file @param {number} line */
   statusSaved: (file, line) => `Saved to ${file}:${line}`,
@@ -42,6 +42,8 @@ export const strings = {
     "There was no text here before, and new text can only be saved into a page's own HTML file. Add to the text beside it instead. Your change was not saved.",
   problemUnsafeCharacters:
     "That spot in your source can only take plain words and punctuation. Remove quotes, brackets or backslashes, or make this change in the file. Your change was not saved.",
+  problemLineBreakNotShown:
+    "This text is kept in code, and the page does not show line breaks in it, so a new line here would not appear. Your change was not saved.",
   problemChangedOnDisk:
     "The source file changed since this page loaded. Reload the page and try again. Your change was not saved.",
   problemEmptyText:

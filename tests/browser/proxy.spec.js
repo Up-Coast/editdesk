@@ -11,6 +11,7 @@ const STRINGS = `export const site = {
   headline: "Coaching that doesn't waste your time",
   nav: { home: "Dashboard" },
   card: { title: "Dashboard" },
+  lede: "Learn to lead. Build with care.",
 };
 `;
 
@@ -33,9 +34,12 @@ async function startApp(canSave) {
           '""',
       );
     response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
-    response.end(`<!doctype html><html><head><title>App</title></head><body>
+    const url = new URL(request.url ?? "/", "http://app");
+    response.end(`<!doctype html><html><head><title>App</title>
+      <style>.keeps-lines { white-space: pre-line; }</style></head><body>
       <nav><a id="nav" href="/">${value("home")}</a></nav>
       <h1 id="headline">${value("headline")}</h1>
+      <p id="lede" class="${url.searchParams.has("lines") ? "keeps-lines" : ""}">${value("lede")}</p>
       <p id="user">Signed in as ${"Abbey"}</p>
     </body></html>`);
   });
@@ -171,5 +175,60 @@ test("criterion: a question left unanswered puts its text back when another edit
     page.locator("editdesk-toolbar").getByRole("alertdialog"),
   ).toBeHidden();
   expect(await app.readStrings()).toBe(STRINGS);
+  await app.stop();
+});
+
+test("criterion: a line break in an app's string is refused when the page would not show it", async ({
+  page,
+}) => {
+  const app = await startApp(true);
+  await page.goto(app.url);
+  await page.locator("#lede").click();
+  await page.locator("#lede").evaluate((element) => {
+    getSelection()?.collapse(
+      /** @type {Text} */ (element.firstChild),
+      "Learn to lead.".length,
+    );
+  });
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.press("Enter");
+  await expect(
+    page.locator("editdesk-toolbar").getByRole("alertdialog"),
+  ).toContainText("does not show line breaks");
+  await expect(page.locator("#lede br")).toHaveCount(0);
+  expect(await app.readStrings()).toBe(STRINGS);
+  await app.stop();
+});
+
+test("criterion: where the page shows line breaks, one is saved into the string and the page reloads to match", async ({
+  page,
+}) => {
+  const app = await startApp(true);
+  await page.goto(`${app.url}/?lines`);
+  await page.locator("#lede").click();
+  await page.locator("#lede").evaluate((element) => {
+    getSelection()?.collapse(
+      /** @type {Text} */ (element.firstChild),
+      "Learn to lead.".length,
+    );
+  });
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.press("Enter");
+  await expect(page.locator("editdesk-toolbar").getByRole("status")).toHaveText(
+    /Saved to strings\.ts/,
+  );
+  expect(await app.readStrings()).toBe(
+    STRINGS.replace("Learn to lead. Build", "Learn to lead.\\nBuild"),
+  );
+  await expect(page.locator("#lede")).toHaveText(
+    /Learn to lead\.\s+Build with care\./,
+  );
+
+  await editAtEnd(page.locator("#lede"));
+  await page.keyboard.type(" Always.");
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => app.readStrings())
+    .toContain('"Learn to lead.\\nBuild with care. Always."');
   await app.stop();
 });

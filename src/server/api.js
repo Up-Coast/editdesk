@@ -1,5 +1,6 @@
 /**
- * The call the in-page editor makes: apply an edit.
+ * The calls the in-page editor makes: apply an edit, undo, redo, and ask
+ * whether there is anything to undo or redo.
  */
 
 import { parseEditRequest } from "../source/edit-service.js";
@@ -15,8 +16,13 @@ const LARGEST_BODY_BYTES = 1_000_000;
 /** The request header that carries the per-run token. */
 export const TOKEN_HEADER = "x-editdesk-token";
 
-/** Where the in-page editor sends edits. */
-export const EDIT_ENDPOINT = `${API_PREFIX}edit`;
+/** Where the in-page editor sends each call. Every call is a POST. */
+export const ENDPOINTS = {
+  edit: `${API_PREFIX}edit`,
+  undo: `${API_PREFIX}undo`,
+  redo: `${API_PREFIX}redo`,
+  history: `${API_PREFIX}history`,
+};
 
 /**
  * Creates the API handler.
@@ -40,22 +46,51 @@ export function createApiHandler({ token, getPort, editService, onSaved }) {
       return true;
     }
 
-    if (url.pathname === EDIT_ENDPOINT && request.method === "POST") {
-      const edit = parseEditRequest(await readJsonBody(request));
+    if (request.method !== "POST") {
+      sendText(response, 405, messages.methodNotAllowed);
+      return true;
+    }
+    const body = await readJsonBody(request);
+    if (body === null) {
+      sendText(response, 400, messages.badRequest);
+      return true;
+    }
+    if (url.pathname === ENDPOINTS.edit) {
+      const edit = parseEditRequest(body);
       if (edit === null) {
         sendText(response, 400, messages.badRequest);
         return true;
       }
-      const outcome = await editService.applyEdit(edit);
-      if (outcome.outcome === "saved") {
-        onSaved(outcome.file, outcome.line);
-      }
-      sendJson(response, 200, outcome);
+      sendOutcome(response, await editService.applyEdit(edit), onSaved);
+      return true;
+    }
+    if (url.pathname === ENDPOINTS.undo) {
+      sendOutcome(response, await editService.undo(), onSaved);
+      return true;
+    }
+    if (url.pathname === ENDPOINTS.redo) {
+      sendOutcome(response, await editService.redo(), onSaved);
+      return true;
+    }
+    if (url.pathname === ENDPOINTS.history) {
+      sendJson(response, 200, editService.historyState());
       return true;
     }
     sendText(response, 404, messages.pageNotFound);
     return true;
   };
+}
+
+/**
+ * @param {import("node:http").ServerResponse} response
+ * @param {import("../source/edit-service.js").EditOutcome} outcome
+ * @param {(file: string, line: number) => void} onSaved
+ */
+function sendOutcome(response, outcome, onSaved) {
+  if (outcome.outcome === "saved") {
+    onSaved(outcome.file, outcome.line);
+  }
+  sendJson(response, 200, outcome);
 }
 
 /**

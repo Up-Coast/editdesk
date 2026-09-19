@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, readdir, stat } from "node:fs/promises";
+import { chmod, readdir, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { test } from "node:test";
 import {
@@ -48,7 +48,7 @@ function edit(fields) {
     oldText: "",
     newText: "",
     location: null,
-    mappedOnly: false,
+    keepsLineBreaks: false,
     ...fields,
   };
 }
@@ -103,9 +103,12 @@ test("criterion: text found in exactly one place in the source is saved there", 
   );
   assert.deepEqual(outcome, {
     outcome: "saved",
+    id: 1,
     file: "app.js",
     line: 1,
     location: { file: "app.js", start: 20 },
+    changedStructure: false,
+    history: { canUndo: true, canRedo: false },
   });
   assert.equal(
     await project.read("app.js"),
@@ -335,28 +338,6 @@ test("criterion: when choosing, the app's source is listed before its tests and 
   );
 });
 
-test("criterion: replaying an edit of a page's own file never falls through to other files", async (t) => {
-  const { project, service } = await setUp({
-    "index.html": PAGE,
-    "other.js": `export const t = "Welcome back";\n`,
-  });
-  t.after(project.remove);
-  const undo = edit({
-    element: numberOf(PAGE, "Welcome"),
-    oldText: "Welcome back",
-    newText: "Welcome",
-    mappedOnly: true,
-  });
-  assert.deepEqual(await service.applyEdit(undo), {
-    outcome: "refused",
-    reason: "changed-on-disk",
-  });
-  assert.equal(
-    await project.read("other.js"),
-    `export const t = "Welcome back";\n`,
-  );
-});
-
 test("criterion: a source file that cannot be read is skipped, not fatal", async (t) => {
   const { project, service } = await setUp({
     "locked.js": `const a = "Find me";\n`,
@@ -372,4 +353,112 @@ test("criterion: a source file that cannot be read is skipped, not fatal", async
   );
   assert.equal(outcome.outcome, "saved");
   assert.equal(await project.read("open.js"), `const b = "Found";\n`);
+});
+
+test("criterion: undo and redo put back exactly what each edit changed, in order", async (t) => {
+  const { project, service } = await setUp({
+    "index.html": PAGE,
+    "app.js": `const a = "Don't stop";\n`,
+  });
+  t.after(project.remove);
+  await service.applyEdit(
+    edit({
+      element: numberOf(PAGE, "Welcome"),
+      oldText: "Welcome",
+      newText: "Hello",
+    }),
+  );
+  await service.applyEdit(
+    edit({ oldText: "Don't stop", newText: "Do not stop" }),
+  );
+
+  const firstUndo = await service.undo();
+  assert.ok(firstUndo.outcome === "saved");
+  assert.equal(firstUndo.id, 2);
+  assert.equal(await project.read("app.js"), `const a = "Don't stop";\n`);
+  await service.undo();
+  assert.equal(await project.read("index.html"), PAGE);
+  assert.deepEqual(await service.undo(), { outcome: "nothing-to-replay" });
+  assert.deepEqual(service.historyState(), { canUndo: false, canRedo: true });
+
+  await service.redo();
+  assert.equal(
+    await project.read("index.html"),
+    PAGE.replace("Welcome", "Hello"),
+  );
+});
+
+test("criterion: undo refuses when the file is no longer as the edit left it", async (t) => {
+  const { project, service } = await setUp({
+    "index.html": PAGE,
+    "other.js": `"Hello"\n`,
+  });
+  t.after(project.remove);
+  await service.applyEdit(
+    edit({
+      element: numberOf(PAGE, "Welcome"),
+      oldText: "Welcome",
+      newText: "Hello",
+    }),
+  );
+  await writeFile(
+    path.join(project.root, "index.html"),
+    PAGE.replace("Welcome", "Changed by hand"),
+  );
+  assert.deepEqual(await service.undo(), {
+    outcome: "refused",
+    reason: "changed-on-disk",
+  });
+  assert.equal(
+    await project.read("index.html"),
+    PAGE.replace("Welcome", "Changed by hand"),
+  );
+  assert.equal(await project.read("other.js"), `"Hello"\n`);
+  assert.deepEqual(service.historyState(), { canUndo: true, canRedo: false });
+});
+
+test("criterion: a line break goes into a string only when the page shows line breaks there", async (t) => {
+  const { project, service } = await setUp({
+    "strings.ts": `export const s = { lede: "One two" };\n`,
+  });
+  t.after(project.remove);
+  const request = edit({ oldText: "One two", newText: "One\u2028two" });
+  assert.deepEqual(await service.applyEdit(request), {
+    outcome: "refused",
+    reason: "line-break-not-shown",
+  });
+  const saved = await service.applyEdit({ ...request, keepsLineBreaks: true });
+  assert.ok(saved.outcome === "saved");
+  assert.equal(saved.changedStructure, true);
+  assert.equal(
+    await project.read("strings.ts"),
+    `export const s = { lede: "One\\ntwo" };\n`,
+  );
+
+  const again = await service.applyEdit(
+    edit({
+      oldText: "One\u2028two",
+      newText: "One\u2028two three",
+      keepsLineBreaks: true,
+    }),
+  );
+  assert.equal(again.outcome, "saved");
+  assert.equal(
+    await project.read("strings.ts"),
+    `export const s = { lede: "One\\ntwo three" };\n`,
+  );
+});
+
+test("criterion: a line break in JSX text is written as a br element", async (t) => {
+  const { project, service } = await setUp({
+    "Hero.tsx": `<h1>Build better apps</h1>\n`,
+  });
+  t.after(project.remove);
+  await service.applyEdit(
+    edit({ oldText: "Build better apps", newText: "Build\u2028better apps" }),
+  );
+  assert.equal(
+    await project.read("Hero.tsx"),
+    `<h1>Build<br />better apps</h1>\n`,
+  );
 });

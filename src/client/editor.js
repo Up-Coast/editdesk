@@ -6,8 +6,7 @@
 import { formatChangeList, summarizeChanges } from "./change-list.js";
 import { readConfig } from "./config.js";
 import { findEditableHost, startEditingSession } from "./editing-session.js";
-import { createHistory } from "./history.js";
-import { createCollectingSaver, createSourceSaver } from "./savers.js";
+import { createCollectingKeeper, createSourceKeeper } from "./keepers.js";
 import { writeSlot } from "./slots.js";
 import { strings } from "./strings.js";
 import { createToolbar, TOOLBAR_ELEMENT } from "./toolbar.js";
@@ -15,6 +14,17 @@ import { createToolbar, TOOLBAR_ELEMENT } from "./toolbar.js";
 const PAGE_STYLESHEET = "/__editdesk/client/page.css";
 
 const MODE_STORAGE_KEY = "editdesk-mode";
+
+const STATUS_AFTER_RELOAD_KEY = "editdesk-status";
+
+const ELEMENTS_THAT_SPLIT_INTO_PARAGRAPHS = new Set(["p", "li"]);
+
+const WHITE_SPACE_THAT_KEEPS_LINE_BREAKS = new Set([
+  "pre",
+  "pre-wrap",
+  "pre-line",
+  "break-spaces",
+]);
 
 const HOVER_ATTRIBUTE = "data-editdesk-hover";
 
@@ -30,9 +40,11 @@ const POINTER_EVENTS_KEPT_FROM_THE_PAGE = [
 const KEY_EVENTS_KEPT_FROM_THE_PAGE = ["keyup", "keypress"];
 
 const config = readConfig();
-const save = config.canSave
-  ? createSourceSaver(config)
-  : createCollectingSaver();
+const keeper = config.canSave
+  ? createSourceKeeper(config)
+  : createCollectingKeeper();
+/** @type {Map<number, import("./keepers.js").KeptEdit>} Edits kept since this page loaded, by id. */
+const keptEdits = new Map();
 
 /** @type {"edit" | "browse"} */
 let mode = "edit";
@@ -42,8 +54,6 @@ let session = null;
 let hovered = null;
 /** @type {Promise<void>} */
 let lastSave = Promise.resolve();
-
-const history = createHistory(showHistory);
 
 const toolbar = createToolbar(
   {
@@ -55,12 +65,21 @@ const toolbar = createToolbar(
   { showsChangeList: !config.canSave },
 );
 
-function showHistory() {
+/**
+ * @param {import("./keepers.js").HistoryState} state
+ */
+function showHistory(state) {
   toolbar.setHistory({
-    canUndo: history.canUndo(),
-    canRedo: history.canRedo(),
-    changeCount: summarizeChanges(history.entries()).length,
+    ...state,
+    changeCount: summarizeChanges(editsInEffect()).length,
   });
+}
+
+function editsInEffect() {
+  return keeper
+    .idsInEffect()
+    .map((id) => keptEdits.get(id))
+    .filter((kept) => kept !== undefined);
 }
 
 /**
@@ -132,6 +151,9 @@ function handleClick(event) {
         toolbar.showProblem(strings.problemAcrossFormatting),
       onEnter: commitSession,
     },
+    config.canSave &&
+      host.hasAttribute(config.elementAttribute) &&
+      ELEMENTS_THAT_SPLIT_INTO_PARAGRAPHS.has(host.localName),
   );
   toolbar.setStatus(strings.statusEditing);
 }
@@ -146,7 +168,11 @@ function handleKeyDown(event) {
   event.stopImmediatePropagation();
   if (event.key === "Enter" && !event.isComposing) {
     event.preventDefault();
-    commitSession();
+    if (event.shiftKey) {
+      session.insertBreak();
+    } else {
+      commitSession();
+    }
   } else if (event.key === " " && session.host.closest("button, summary")) {
     event.preventDefault();
     document.execCommand("insertText", false, " ");
@@ -183,15 +209,22 @@ function inTurn(task) {
 async function keepChanges(changes) {
   for (const change of changes) {
     const number = change.target.getAttribute(config.elementAttribute);
+    const keepsLineBreaks = WHITE_SPACE_THAT_KEEPS_LINE_BREAKS.has(
+      getComputedStyle(change.target).whiteSpace,
+    );
+    const asSourceText = (/** @type {string} */ text) =>
+      number === null && keepsLineBreaks
+        ? text.replaceAll("\n", config.lineBreak)
+        : text;
     await keep(
       {
         page: location.pathname,
         element: number === null ? null : Number(number),
         slot: change.slot,
-        oldText: change.oldText,
-        newText: change.newText,
+        oldText: asSourceText(change.oldText),
+        newText: asSourceText(change.newText),
         location: null,
-        mappedOnly: false,
+        keepsLineBreaks,
       },
       change.target,
     );
@@ -201,16 +234,16 @@ async function keepChanges(changes) {
 /**
  * Keeps one edit, asking the person when the source has more than one place
  * for it, and putting the old text back on the page when it cannot be kept.
- * @param {import("./savers.js").Edit} edit
+ * @param {import("./keepers.js").Edit} edit
  * @param {Element} target
  */
 async function keep(edit, target) {
   toolbar.setStatus(strings.statusSaving);
-  const outcome = await save(edit);
+  const outcome = await keeper.save(edit);
   if (outcome.outcome === "saved" || outcome.outcome === "collected") {
-    const location = outcome.outcome === "saved" ? outcome.location : null;
-    history.record({ edit: { ...edit, location }, target });
-    toolbar.setStatus(describeKept(outcome));
+    keptEdits.set(outcome.id, { edit, target });
+    showHistory(outcome.history);
+    showKept(outcome, edit, describeKept(outcome));
     return;
   }
   toolbar.setStatus(strings.statusReady);
@@ -237,6 +270,9 @@ async function keep(edit, target) {
     return;
   }
   putBack();
+  if (outcome.outcome === "nothing-to-replay") {
+    return;
+  }
   const addedWhereNoneWas =
     outcome.outcome === "not-found" && edit.oldText.trim() === "";
   toolbar.showProblem(
@@ -256,52 +292,87 @@ function replayInTurn(direction) {
  * @param {"undo" | "redo"} direction
  */
 async function replay(direction) {
-  const entry = direction === "undo" ? history.peekUndo() : history.peekRedo();
-  if (!entry) {
-    return;
-  }
-  const { edit, target } = entry;
-  const texts =
-    direction === "undo"
-      ? { oldText: edit.newText, newText: edit.oldText }
-      : {};
-  const step = {
-    ...edit,
-    ...texts,
-    mappedOnly: edit.element !== null && edit.location === null,
-  };
   toolbar.setStatus(strings.statusSaving);
-  const outcome = await save(step);
+  const outcome = await keeper[direction]();
   if (outcome.outcome !== "saved" && outcome.outcome !== "collected") {
     toolbar.setStatus(strings.statusReady);
-    toolbar.showProblem(
-      describeProblem(
-        outcome.outcome === "choose"
-          ? { outcome: "refused", reason: "changed-on-disk" }
-          : outcome,
-      ),
-    );
+    if (
+      outcome.outcome !== "nothing-to-replay" &&
+      outcome.outcome !== "choose"
+    ) {
+      toolbar.showProblem(describeProblem(outcome));
+    }
     return;
   }
-  if (target.isConnected) {
-    writeSlot(target, step.slot, step.newText);
+  showHistory(outcome.history);
+  const status =
+    direction === "undo" ? strings.statusUndone : strings.statusRedone;
+  const kept = keptEdits.get(outcome.id);
+  if (!kept?.target.isConnected) {
+    reloadShowing(status);
+    return;
   }
-  if (direction === "undo") {
-    history.confirmUndo();
-    toolbar.setStatus(strings.statusUndone);
+  const { edit, target } = kept;
+  writeSlot(
+    target,
+    edit.slot,
+    direction === "undo" ? edit.oldText : edit.newText,
+  );
+  showKept(outcome, edit, status);
+}
+
+/**
+ * Shows that an edit was kept. When the file's elements no longer match the
+ * page's (a paragraph was split or joined, or an app's source gained or lost
+ * a line break), the page is loaded again first, so the two agree.
+ * @param {import("./keepers.js").KeptOutcome} outcome
+ * @param {import("./keepers.js").Edit} edit
+ * @param {string} status
+ */
+function showKept(outcome, edit, status) {
+  const splitsParagraph =
+    edit.oldText.includes(config.paragraphBreak) ||
+    edit.newText.includes(config.paragraphBreak);
+  const pageIsStale =
+    outcome.outcome === "saved" &&
+    outcome.changedStructure &&
+    (splitsParagraph || outcome.location !== null);
+  if (pageIsStale) {
+    reloadShowing(status);
   } else {
-    history.confirmRedo();
-    toolbar.setStatus(strings.statusRedone);
+    toolbar.setStatus(status);
+  }
+}
+
+/**
+ * @param {string} status Shown in the toolbar once the page has loaded again.
+ */
+function reloadShowing(status) {
+  try {
+    sessionStorage.setItem(STATUS_AFTER_RELOAD_KEY, status);
+  } catch {
+    // The status is then not shown after the reload.
+  }
+  location.reload();
+}
+
+function takeStatusAfterReload() {
+  try {
+    const status = sessionStorage.getItem(STATUS_AFTER_RELOAD_KEY);
+    sessionStorage.removeItem(STATUS_AFTER_RELOAD_KEY);
+    return status;
+  } catch {
+    return null;
   }
 }
 
 async function copyChanges() {
-  await navigator.clipboard.writeText(formatChangeList(history.entries()));
+  await navigator.clipboard.writeText(formatChangeList(editsInEffect()));
   toolbar.setStatus(strings.changesCopied);
 }
 
 /**
- * @param {Extract<import("./savers.js").SaveOutcome, { outcome: "saved" | "collected" }>} outcome
+ * @param {import("./keepers.js").KeptOutcome} outcome
  */
 function describeKept(outcome) {
   return outcome.outcome === "saved"
@@ -310,7 +381,7 @@ function describeKept(outcome) {
 }
 
 /**
- * @param {Exclude<import("./savers.js").SaveOutcome, { outcome: "saved" | "collected" | "choose" }>} outcome
+ * @param {Exclude<import("./keepers.js").KeepOutcome, import("./keepers.js").KeptOutcome | { outcome: "choose" | "nothing-to-replay" }>} outcome
  */
 function describeProblem(outcome) {
   if (outcome.outcome === "not-found") {
@@ -321,6 +392,7 @@ function describeProblem(outcome) {
   }
   return {
     "unsafe-characters": strings.problemUnsafeCharacters,
+    "line-break-not-shown": strings.problemLineBreakNotShown,
     "changed-on-disk": strings.problemChangedOnDisk,
     "empty-text": strings.problemEmptyText,
   }[outcome.reason];
@@ -389,4 +461,5 @@ window.addEventListener(
 window.addEventListener("pagehide", commitSession);
 
 setMode(readStoredMode());
-showHistory();
+toolbar.setStatus(takeStatusAfterReload() ?? strings.statusReady);
+void keeper.history().then(showHistory);

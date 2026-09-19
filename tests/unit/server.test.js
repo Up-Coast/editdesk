@@ -134,7 +134,7 @@ test("criterion: an edit is accepted only with this run's token, from this origi
     oldText: "Old words",
     newText: "New words",
     location: null,
-    mappedOnly: false,
+    keepsLineBreaks: false,
   });
   const send = (/** @type {Record<string, string>} */ headers) =>
     request(

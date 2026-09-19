@@ -71,9 +71,66 @@ test("criterion: typed markup characters are written as text, never as markup", 
 });
 
 test("criterion: text beside an inline element is edited without touching the element", () => {
-  const slot = slotShowing(PAGE, ", welcome\n      to the\u00a0site.");
-  const result = rewriteSlot(PAGE, slot, ", welcome\n      to our\u00a0site.");
+  const shown = ", welcome\n      to the\u00a0site.\u2028Second line\n    ";
+  const result = rewriteSlot(
+    PAGE,
+    slotShowing(PAGE, shown),
+    shown.replace("the", "our"),
+  );
   assert.equal(result, PAGE.replace("to the&nbsp;site", "to our&nbsp;site"));
+});
+
+test("criterion: a line break is written as a br tag, and an existing one can be removed", () => {
+  const source = "<h1>Fresh bread<br />every day</h1>";
+  const slot = slotShowing(source, "Fresh bread\u2028every day");
+  assert.equal(
+    rewriteSlot(source, slot, "Fresh\u2028bread\u2028every day"),
+    "<h1>Fresh<br>bread<br />every day</h1>",
+  );
+  assert.equal(
+    rewriteSlot(source, slot, "Fresh bread every day"),
+    "<h1>Fresh bread every day</h1>",
+  );
+});
+
+test("criterion: a br that carries attributes is left alone as an element", () => {
+  const source = '<p>One<br class="wide">Two</p>';
+  assert.deepEqual(
+    describeHtml(source).elements[0].slots.map((slot) => slot.text),
+    ["One", "Two"],
+  );
+});
+
+test("criterion: a paragraph break splits a paragraph, keeping its attributes except the id", () => {
+  const source = `<main>\n    <p id="intro" class="lead">First thought. Second thought.</p>\n</main>`;
+  const paragraph = describeHtml(source).elements.find((element) =>
+    element.slots.some((slot) => slot.text.startsWith("First")),
+  );
+  assert.ok(paragraph);
+  assert.equal(
+    rewriteSlot(
+      source,
+      paragraph.slots[0],
+      "First thought.\u2029Second thought.",
+      paragraph.paragraphBreak,
+    ),
+    `<main>\n    <p id="intro" class="lead">First thought.</p>\n    <p class="lead">Second thought.</p>\n</main>`,
+  );
+});
+
+test("criterion: a paragraph break in an element that cannot be split becomes two line breaks", () => {
+  const source = "<h2>One Two</h2>";
+  const heading = describeHtml(source).elements[0];
+  assert.equal(heading.paragraphBreak, undefined);
+  assert.equal(
+    rewriteSlot(
+      source,
+      heading.slots[0],
+      "One\u2029Two",
+      heading.paragraphBreak,
+    ),
+    "<h2>One<br><br>Two</h2>",
+  );
 });
 
 test("criterion: an empty slot can receive text", () => {

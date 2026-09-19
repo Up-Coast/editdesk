@@ -1,6 +1,6 @@
 ---
 title: Editing guide
-nav_order: 2
+nav_order: 3
 ---
 
 # Editing guide
@@ -25,14 +25,24 @@ A few things to know:
 - Double-click a word to select it, as in any editor
 - Clicking text inside a paragraph edits the whole paragraph, including its bold text and links
 - Bold, links and other formatting cannot be added or removed. A selection that reaches across formatting cannot be deleted or typed over. Select the text on one side of the formatting at a time
-- Enter never adds a line. A piece of text stays one piece of text
 - Pasted text arrives as plain text
 - Spelling is checked while you type, by the browser
 - Text in form fields, images and charts cannot be edited
 
+## New lines and paragraphs
+
+Press Shift+Enter for a new line. Press it twice in a row for a new paragraph. To remove either, put the caret after it and press Backspace.
+
+What is written depends on where the text lives:
+
+- **In a page's own HTML file**, a new line is a `<br>` tag. A new paragraph splits a `<p>` or `<li>` in two. The second one gets the same class and other attributes, without the `id`. In any other element, such as a heading or a button, a new paragraph is two new lines
+- **In an app's source**, a new line in text between tags is a `<br />` tag. A new line in a string is `\n`, and is saved only when the page shows line breaks in that text (the element's `white-space` style is `pre`, `pre-wrap`, `pre-line` or `break-spaces`). Otherwise the line break would not appear, so Editdesk puts the text back and says so. A new paragraph is two new lines
+
+The spaces on either side of a new line are removed. After a paragraph is split or joined, and after a new line is saved to an app's source, the page loads again so it matches the file.
+
 ## Undo and redo
 
-**Undo** puts the previous wording back in the file and on the page. **Redo** applies it again. Both work on the edits made since the page was loaded. While you are typing, the keyboard undo shortcut works on your typing as usual.
+**Undo** puts the file back as it was before the latest saved edit, and the page with it. **Redo** applies the edit again. They cover every edit saved since Editdesk was started, on any page, newest first. Undo is refused when something else has changed the file since the edit. While you are typing, the keyboard undo shortcut works on your typing as usual, except for new lines.
 
 ## Using the page while editing
 

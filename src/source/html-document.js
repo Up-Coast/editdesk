@@ -8,12 +8,17 @@
  */
 
 import { parse } from "parse5";
+import { LINE_BREAK } from "./breaks.js";
 import { decodeHtmlText, rewriteHtmlText } from "./html-text.js";
 
 /** The attribute that carries an element's number in the served copy. */
 export const ELEMENT_ATTRIBUTE = "data-editdesk-el";
 
 const BYTE_ORDER_MARK = "\uFEFF";
+
+const ELEMENTS_THAT_SPLIT_INTO_PARAGRAPHS = new Set(["p", "li"]);
+
+const ID_ATTRIBUTE = /\s+id\s*=\s*("[^"]*"|'[^']*'|[^\s>]+)/i;
 
 const HTML_NAMESPACE = "http://www.w3.org/1999/xhtml";
 
@@ -40,7 +45,7 @@ const ELEMENTS_WITHOUT_EDITABLE_TEXT = new Set([
 
 /**
  * An element of the source whose text can be edited.
- * @typedef {{ id: number, attributeOffset: number, slots: SourceSlot[] }} SourceElement
+ * @typedef {{ id: number, attributeOffset: number, slots: SourceSlot[], paragraphBreak: string | undefined }} SourceElement `paragraphBreak` is the markup that ends this element and starts a copy of it, when it is a paragraph or list item.
  */
 
 /**
@@ -64,6 +69,7 @@ export function describeHtml(source) {
     elements: elements.map((element) => ({
       id: element.id,
       attributeOffset: element.attributeOffset + markLength,
+      paragraphBreak: element.paragraphBreak,
       slots: element.slots.map((slot) => ({
         start: slot.start + markLength,
         end: slot.end + markLength,
@@ -108,13 +114,14 @@ export function injectIntoHead(source, headSnippet) {
  * @param {string} source The HTML file's contents.
  * @param {SourceSlot} slot The slot, as returned by {@link describeHtml} for this same source.
  * @param {string} newText The text the slot should show.
+ * @param {string} [paragraphBreak] The slot's element's `paragraphBreak`.
  * @returns {string} The file's new contents.
  */
-export function rewriteSlot(source, slot, newText) {
+export function rewriteSlot(source, slot, newText, paragraphBreak) {
   const raw = source.slice(slot.start, slot.end);
   return (
     source.slice(0, slot.start) +
-    rewriteHtmlText(raw, newText) +
+    rewriteHtmlText(raw, newText, paragraphBreak) +
     source.slice(slot.end)
   );
 }
@@ -142,6 +149,7 @@ function collectElements(node, source, elements) {
         id: elements.length,
         attributeOffset: startTag.startOffset + 1 + child.tagName.length,
         slots,
+        paragraphBreak: paragraphBreakFor(child, source),
       });
     }
     collectElements(child, source, elements);
@@ -173,6 +181,10 @@ function findSlots(element, source) {
       slotText += child.value;
       continue;
     }
+    if (child.tagName === "br" && child.attrs.length === 0) {
+      slotText += LINE_BREAK;
+      continue;
+    }
     if (!child.sourceCodeLocation) {
       return null;
     }
@@ -193,6 +205,28 @@ function findSlots(element, source) {
       decodeHtmlText(source.slice(slot.start, slot.end)) === slot.text,
   );
   return mapsExactly ? slots : null;
+}
+
+/**
+ * Builds the markup that splits a paragraph or list item in two: its end
+ * tag, then its own start tag again on a new line at the same indentation.
+ * The copy drops the `id`, which must stay unique.
+ * @param {any} element A parse5 element with a located start tag.
+ * @param {string} source
+ * @returns {string | undefined} Undefined for an element that cannot be split.
+ */
+function paragraphBreakFor(element, source) {
+  if (!ELEMENTS_THAT_SPLIT_INTO_PARAGRAPHS.has(element.tagName)) {
+    return undefined;
+  }
+  const { startOffset, endOffset } = element.sourceCodeLocation.startTag;
+  const lineStart = source.lastIndexOf("\n", startOffset - 1) + 1;
+  const beforeTag = source.slice(lineStart, startOffset);
+  const indentation = beforeTag.trim() === "" ? `\n${beforeTag}` : "";
+  const startTag = source
+    .slice(startOffset, endOffset)
+    .replace(ID_ATTRIBUTE, "");
+  return `</${element.tagName}>${indentation}${startTag}`;
 }
 
 /**

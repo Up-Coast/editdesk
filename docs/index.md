@@ -12,17 +12,26 @@ Editdesk lets you change the words on a web page by clicking them and typing, th
 ## Start
 
 1. Install [Node.js](https://nodejs.org) 20.19 or newer.
-2. Open a page:
+2. Install Editdesk:
 
    ```bash
-   npx github:Up-Coast/editdesk page.html
+   npm install --global editdesk
    ```
 
-3. Click any text and type.
-4. Press Enter to save.
+3. Open a page:
+
+   ```bash
+   editdesk page.html
+   ```
+
+4. Click any text and type.
+5. Press Enter to save.
+
+Once installed, Editdesk [works offline](install.md#working-offline).
 
 ## Pages
 
+- [Install](install.md): installing, working offline, updating and removing
 - [Editing guide](editing.md): everything the editor does
 - [Command reference](reference.md): targets, options, and which files are read and written
 - [When an edit is not saved](troubleshooting.md): each message and what to do

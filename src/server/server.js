@@ -7,7 +7,8 @@ import http from "node:http";
 import { createEditService } from "../source/edit-service.js";
 import { messages } from "../messages.js";
 import { ELEMENT_ATTRIBUTE } from "../source/html-document.js";
-import { createApiHandler, EDIT_ENDPOINT, TOKEN_HEADER } from "./api.js";
+import { LINE_BREAK, PARAGRAPH_BREAK } from "../source/breaks.js";
+import { createApiHandler, ENDPOINTS, TOKEN_HEADER } from "./api.js";
 import { buildHeadSnippet, createEditorAssetHandler } from "./editor-assets.js";
 import { createProxySite } from "./proxy-site.js";
 import { sendText } from "./responses.js";
@@ -43,7 +44,9 @@ export async function startServer({
   const headSnippet = buildHeadSnippet({
     token,
     tokenHeader: TOKEN_HEADER,
-    editEndpoint: EDIT_ENDPOINT,
+    endpoints: ENDPOINTS,
+    lineBreak: LINE_BREAK,
+    paragraphBreak: PARAGRAPH_BREAK,
     elementAttribute: ELEMENT_ATTRIBUTE,
     canSave: root !== null,
   });

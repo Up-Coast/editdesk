@@ -9,9 +9,14 @@
  */
 
 import { decodeHTML } from "entities";
+import { LINE_BREAK, PARAGRAPH_BREAK } from "./breaks.js";
 
-const CHARACTER_REFERENCE_OR_LINE_ENDING =
-  /&(?:#[xX][0-9a-fA-F]+|#[0-9]+|[a-zA-Z][a-zA-Z0-9]*);?|\r\n?/g;
+const CHARACTER_REFERENCE_LINE_ENDING_OR_BREAK =
+  /&(?:#x[0-9a-f]+|#[0-9]+|[a-z][a-z0-9]*);?|\r\n?|<br\s*\/?>/gi;
+
+const PLAIN_BREAK_TAG = "<br>";
+
+const TWO_LINE_BREAKS = PLAIN_BREAK_TAG + PLAIN_BREAK_TAG;
 
 const NO_BREAK_SPACE = "\u00a0";
 
@@ -21,8 +26,8 @@ const NO_BREAK_SPACE = "\u00a0";
  */
 
 /**
- * Splits raw HTML text into units: one per character reference, line ending
- * or plain character.
+ * Splits raw HTML text into units: one per character reference, line ending,
+ * plain `br` tag or plain character.
  * @param {string} raw Raw source between two tags.
  * @returns {HtmlTextUnit[]} The units, in order.
  */
@@ -30,11 +35,10 @@ export function tokenizeHtmlText(raw) {
   /** @type {HtmlTextUnit[]} */
   const units = [];
   let position = 0;
-  for (const match of raw.matchAll(CHARACTER_REFERENCE_OR_LINE_ENDING)) {
+  for (const match of raw.matchAll(CHARACTER_REFERENCE_LINE_ENDING_OR_BREAK)) {
     pushPlainCharacters(units, raw.slice(position, match.index));
     const matched = match[0];
-    const text = matched.startsWith("&") ? decodeHTML(matched) : "\n";
-    units.push({ raw: matched, text });
+    units.push({ raw: matched, text: textShownFor(matched) });
     position = match.index + matched.length;
   }
   pushPlainCharacters(units, raw.slice(position));
@@ -62,7 +66,8 @@ export function encodeHtmlText(text) {
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
-    .replaceAll(NO_BREAK_SPACE, "&nbsp;");
+    .replaceAll(NO_BREAK_SPACE, "&nbsp;")
+    .replaceAll(LINE_BREAK, PLAIN_BREAK_TAG);
 }
 
 /**
@@ -72,9 +77,14 @@ export function encodeHtmlText(text) {
  * entity), the whole run is encoded afresh.
  * @param {string} raw Raw source between two tags.
  * @param {string} newText The text it should show.
+ * @param {string} [paragraphBreak] The markup that ends one paragraph and starts the next, for the element this text is in. Two line breaks when the element cannot be split.
  * @returns {string} The rewritten raw source.
  */
-export function rewriteHtmlText(raw, newText) {
+export function rewriteHtmlText(
+  raw,
+  newText,
+  paragraphBreak = TWO_LINE_BREAKS,
+) {
   const units = tokenizeHtmlText(raw);
   const oldText = units.map((unit) => unit.text).join("");
   const sharedStart = commonPrefixLength(oldText, newText);
@@ -85,10 +95,24 @@ export function rewriteHtmlText(raw, newText) {
     kept.startTextLength,
     newText.length - kept.endTextLength,
   );
-  const rewritten = kept.startRaw + encodeHtmlText(middle) + kept.endRaw;
-  return decodeHtmlText(rewritten) === newText
-    ? rewritten
-    : encodeHtmlText(newText);
+  const encodedMiddle = encodeHtmlText(middle);
+  const showsNewText =
+    decodeHtmlText(kept.startRaw + encodedMiddle + kept.endRaw) === newText;
+  const withParagraphs = (/** @type {string} */ encoded) =>
+    encoded.replaceAll(PARAGRAPH_BREAK, paragraphBreak);
+  return showsNewText
+    ? kept.startRaw + withParagraphs(encodedMiddle) + kept.endRaw
+    : withParagraphs(encodeHtmlText(newText));
+}
+
+/**
+ * @param {string} matched A character reference, a line ending or a plain `br` tag.
+ */
+function textShownFor(matched) {
+  if (matched.startsWith("&")) {
+    return decodeHTML(matched);
+  }
+  return matched.startsWith("<") ? LINE_BREAK : "\n";
 }
 
 /**

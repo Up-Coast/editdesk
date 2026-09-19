@@ -1,6 +1,6 @@
 ---
 title: When an edit is not saved
-nav_order: 4
+nav_order: 5
 ---
 
 # When an edit is not saved
@@ -23,14 +23,21 @@ You typed into a gap that had no text, such as the space after a link. Editdesk 
 
 ## "That spot in your source can only take plain words and punctuation"
 
-The text is part of a longer string or expression, or in a kind of file Editdesk does not know how to quote for, such as YAML or PHP. It writes only letters, numbers, spaces and a few punctuation marks there. The [command reference](reference.md#where-an-edit-is-saved) lists them. **Undo** shows this message too when the original wording contained other characters.
+The text is part of a longer string or expression, or in a kind of file Editdesk does not know how to quote for, such as YAML or PHP. It writes only letters, numbers, spaces and a few punctuation marks there. The [command reference](reference.md#where-an-edit-is-saved) lists them.
 
 1. Remove quotes, brackets, braces, backslashes, `&`, `$` and backticks from the new text, and save again.
 2. If you need those characters, make the change in the file.
 
+## "This text is kept in code"
+
+You added a new line to text that lives in a string in the source, and the page does not show line breaks in that text. The new line would be saved and never appear.
+
+1. Save the wording without the new line.
+2. To show line breaks there, give the element the style `white-space: pre-line` in the code, then add the new line again.
+
 ## "The source file changed since this page loaded"
 
-The file was edited by something else after the page loaded, so the place Editdesk recorded no longer holds the text. This also appears when **Undo** or **Redo** cannot find the wording it expects.
+The file was edited by something else after the page loaded, so the place Editdesk recorded no longer holds the text. **Undo** and **Redo** show it too, when the file is not as the edit left it.
 
 1. Reload the page.
 2. Make the edit again.

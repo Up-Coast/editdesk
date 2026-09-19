@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  canWrite,
   findInSource,
   rewriteMatch,
+  whyNotWritable,
 } from "../../src/source/source-text.js";
 
 /**
@@ -101,9 +101,15 @@ test("criterion: text that is only part of a larger string needs confirmation an
     "Hello world",
   );
   assert.equal(match.context.kind, "partial");
-  assert.equal(canWrite(match.context, "Hello there"), true);
-  assert.equal(canWrite(match.context, 'Hello "there"'), false);
-  assert.equal(canWrite(match.context, "Hello \\ there"), false);
+  assert.equal(whyNotWritable(match.context, "Hello there", false), null);
+  assert.equal(
+    whyNotWritable(match.context, 'Hello "there"', false),
+    "unsafe-characters",
+  );
+  assert.equal(
+    whyNotWritable(match.context, "Hello \\ there", false),
+    "unsafe-characters",
+  );
 });
 
 test("criterion: an attribute value in an HTML file is not treated as a string to rewrite silently", () => {
@@ -164,14 +170,21 @@ test("criterion: quoted text outside JavaScript and JSON is not assumed to use J
   ]) {
     const [match] = findInSource(source, extension, "Hello there");
     assert.equal(match.context.kind, "partial", extension);
-    assert.equal(canWrite(match.context, "Don't go"), false, extension);
+    assert.equal(
+      whyNotWritable(match.context, "Don't go", false),
+      "unsafe-characters",
+      extension,
+    );
   }
 });
 
 test("criterion: characters that mean something in YAML cannot be written into a YAML file", () => {
   const [match] = findInSource(`title: Hello world`, ".yaml", "Hello world");
-  assert.equal(canWrite(match.context, "Hello #1: x"), false);
-  assert.equal(canWrite(match.context, "Hello, world!"), true);
+  assert.equal(
+    whyNotWritable(match.context, "Hello #1: x", false),
+    "unsafe-characters",
+  );
+  assert.equal(whyNotWritable(match.context, "Hello, world!", false), null);
 });
 
 test("criterion: code that merely sits between two strings is not treated as a string", () => {

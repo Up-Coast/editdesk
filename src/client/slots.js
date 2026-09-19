@@ -4,27 +4,104 @@
  * A slot is a gap before, between or after an element's child elements,
  * where text can sit. The server divides source elements the same way, so a
  * slot number means the same place in the page and in the file.
+ *
+ * A plain `br` is part of the text, not a divider: it reads as the line-break
+ * character. So does the marker the editor shows for a paragraph break.
  */
+
+import { readConfig } from "./config.js";
+
+const { lineBreak, paragraphBreak } = readConfig();
+
+/** Marks the element the editor shows where a paragraph will be split. */
+export const PARAGRAPH_MARKER_ATTRIBUTE = "data-editdesk-paragraph";
+
+/**
+ * Returns the character a node stands for inside text, or null when the node
+ * is not a break.
+ * @param {Node} node
+ * @returns {string | null}
+ */
+export function breakCharacterOf(node) {
+  if (!(node instanceof Element)) {
+    return null;
+  }
+  if (node.hasAttribute(PARAGRAPH_MARKER_ATTRIBUTE)) {
+    return paragraphBreak;
+  }
+  return node.localName === "br" && node.attributes.length === 0
+    ? lineBreak
+    : null;
+}
+
+/**
+ * Says whether a node divides an element's text into slots.
+ * @param {Node} node
+ * @returns {boolean} True for comments and for elements that are not breaks.
+ */
+export function isDivider(node) {
+  return node.nodeType !== Node.TEXT_NODE && breakCharacterOf(node) === null;
+}
+
+/**
+ * Creates the element the editor shows where a paragraph will be split.
+ * @returns {HTMLElement}
+ */
+export function createParagraphMarker() {
+  const marker = document.createElement("span");
+  marker.setAttribute(PARAGRAPH_MARKER_ATTRIBUTE, "");
+  return marker;
+}
 
 /**
  * Returns the text of each slot of an element.
  * @param {Element} element
- * @returns {string[]} One entry per slot; always one more than the number of non-text children.
+ * @returns {string[]} One entry per slot; always one more than the number of dividers.
  */
 export function readSlots(element) {
   const slots = [""];
   for (const child of element.childNodes) {
-    if (child.nodeType === Node.TEXT_NODE) {
-      slots[slots.length - 1] += child.nodeValue;
-    } else {
+    if (isDivider(child)) {
       slots.push("");
+    } else {
+      slots[slots.length - 1] += breakCharacterOf(child) ?? child.nodeValue;
     }
   }
   return slots;
 }
 
 /**
- * Replaces the text of one slot, leaving every other child in place.
+ * Builds the nodes that show a piece of slot text.
+ * @param {string} text Slot text, which may hold break characters.
+ * @returns {Node[]} Text nodes, `br` elements and paragraph markers, in order.
+ */
+export function buildSlotNodes(text) {
+  /** @type {Node[]} */
+  const nodes = [];
+  let run = "";
+  const endRun = () => {
+    if (run !== "") {
+      nodes.push(document.createTextNode(run));
+      run = "";
+    }
+  };
+  for (const character of text) {
+    if (character === lineBreak) {
+      endRun();
+      nodes.push(document.createElement("br"));
+    } else if (character === paragraphBreak) {
+      endRun();
+      nodes.push(createParagraphMarker());
+    } else {
+      run += character;
+    }
+  }
+  endRun();
+  return nodes;
+}
+
+/**
+ * Replaces the text of one slot, leaving every divider in place.
  * @param {Element} element
  * @param {number} slotIndex
  * @param {string} text
@@ -34,7 +111,7 @@ export function writeSlot(element, slotIndex, text) {
   /** @type {ChildNode | null} */
   let boundary = null;
   for (const child of [...element.childNodes]) {
-    if (child.nodeType !== Node.TEXT_NODE) {
+    if (isDivider(child)) {
       if (currentSlot === slotIndex) {
         boundary = child;
         break;
@@ -44,15 +121,15 @@ export function writeSlot(element, slotIndex, text) {
       child.remove();
     }
   }
-  if (text !== "") {
-    element.insertBefore(document.createTextNode(text), boundary);
+  for (const node of buildSlotNodes(text)) {
+    element.insertBefore(node, boundary);
   }
 }
 
 /**
- * Lists every element and comment under a root, in document order.
+ * Lists every divider under a root, in document order.
  * @param {Element} root
- * @returns {Node[]} The nodes that divide text into slots.
+ * @returns {Node[]}
  */
 export function listDividers(root) {
   const walker = document.createTreeWalker(
@@ -61,7 +138,9 @@ export function listDividers(root) {
   );
   const dividers = [];
   while (walker.nextNode()) {
-    dividers.push(walker.currentNode);
+    if (isDivider(walker.currentNode)) {
+      dividers.push(walker.currentNode);
+    }
   }
   return dividers;
 }
@@ -80,8 +159,8 @@ export function sameDividers(first, second) {
 }
 
 /**
- * The text and child elements of every element under a root, as they were at
- * one moment.
+ * The text and dividers of every element under a root, as they were at one
+ * moment.
  * @typedef {{ element: Element, dividers: Node[], slots: string[] }[]} TreeSnapshot
  */
 
@@ -91,13 +170,13 @@ export function sameDividers(first, second) {
  * @returns {TreeSnapshot}
  */
 export function captureTree(root) {
-  return [root, ...root.querySelectorAll("*")].map((element) => ({
-    element,
-    dividers: [...element.childNodes].filter(
-      (child) => child.nodeType !== Node.TEXT_NODE,
-    ),
-    slots: readSlots(element),
-  }));
+  return [root, ...root.querySelectorAll("*")]
+    .filter((element) => breakCharacterOf(element) === null)
+    .map((element) => ({
+      element,
+      dividers: [...element.childNodes].filter(isDivider),
+      slots: readSlots(element),
+    }));
 }
 
 /**
@@ -108,7 +187,7 @@ export function captureTree(root) {
 export function restoreTree(snapshot) {
   for (const { element, dividers, slots } of snapshot) {
     const children = slots.flatMap((text, index) => [
-      ...(text === "" ? [] : [document.createTextNode(text)]),
+      ...buildSlotNodes(text),
       ...(index < dividers.length ? [dividers[index]] : []),
     ]);
     element.replaceChildren(...children);

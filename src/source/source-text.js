@@ -8,6 +8,8 @@
  * one spelling that is correct for the place the text was found.
  */
 
+import { LINE_BREAK } from "./breaks.js";
+
 const SOURCE_WHITESPACE = /[ \t\r\n\f]+/;
 
 /** @type {Record<string, string[]>} */
@@ -23,6 +25,7 @@ const ALTERNATIVE_SPELLINGS = {
   $: ["$", "\\$"],
   "\\": ["\\\\"],
   "\u00a0": ["\u00a0", "&nbsp;", "&#160;", "\\u00a0"],
+  [LINE_BREAK]: ["\\n", "<br>", "<br/>", "<br />"],
   "‘": ["‘", "&lsquo;", "&#8216;", "\\u2018"],
   "’": ["’", "&rsquo;", "&#8217;", "\\u2019"],
   "“": ["“", "&ldquo;", "&#8220;", "\\u201c"],
@@ -123,16 +126,22 @@ export function findInSource(source, extension, text) {
 }
 
 /**
- * Says whether replacement text can be written into a context safely.
+ * Says why replacement text cannot be written into a context, if it cannot.
  * @param {SourceContext} context Where the text will be written.
  * @param {string} newText The replacement on-screen text.
- * @returns {boolean} False when the characters cannot be written there with certainty.
+ * @param {boolean} keepsLineBreaks True when the page shows the line breaks of the text in this element.
+ * @returns {"unsafe-characters" | "line-break-not-shown" | null} Null when the text can be written.
  */
-export function canWrite(context, newText) {
-  if (context.kind !== "partial") {
-    return true;
+export function whyNotWritable(context, newText, keepsLineBreaks) {
+  if (context.kind === "partial") {
+    const safe = context.yaml ? SAFE_IN_YAML : SAFE_IN_ANY_CONTEXT;
+    return safe.test(newText) ? null : "unsafe-characters";
   }
-  return (context.yaml ? SAFE_IN_YAML : SAFE_IN_ANY_CONTEXT).test(newText);
+  const isWrittenAsNewline =
+    context.kind === "string" || context.kind === "attribute";
+  return isWrittenAsNewline && newText.includes(LINE_BREAK) && !keepsLineBreaks
+    ? "line-break-not-shown"
+    : null;
 }
 
 /**
@@ -202,19 +211,24 @@ export function encodeForContext(text, context) {
     const escaped = text
       .replaceAll("\\", "\\\\")
       .replaceAll(context.quote, `\\${context.quote}`)
-      .replaceAll("\n", "\\n");
+      .replaceAll("\n", "\\n")
+      .replaceAll(LINE_BREAK, "\\n");
     return context.quote === "`" ? escaped.replaceAll("${", "\\${") : escaped;
   }
   if (context.kind === "attribute") {
     return encodeMarkup(text, true)
       .replaceAll('"', "&quot;")
-      .replaceAll("'", "&apos;");
+      .replaceAll("'", "&apos;")
+      .replaceAll(LINE_BREAK, "&#10;");
   }
   if (context.kind === "markup") {
-    return encodeMarkup(text, context.expressions);
+    return encodeMarkup(text, context.expressions).replaceAll(
+      LINE_BREAK,
+      context.expressions ? "<br />" : "<br>",
+    );
   }
   if (context.kind === "prose") {
-    return text.replaceAll("<", "&lt;");
+    return text.replaceAll("<", "&lt;").replaceAll(LINE_BREAK, "<br>");
   }
   return text;
 }

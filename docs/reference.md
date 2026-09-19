@@ -1,6 +1,6 @@
 ---
 title: Command reference
-nav_order: 3
+nav_order: 4
 ---
 
 # Command reference
@@ -45,7 +45,7 @@ A page that loads files from outside its own folder needs `--root` set to a fold
 
 Editdesk tries two ways, in this order.
 
-1. **The page's own HTML file.** Used when the page is an `.html` or `.htm` file on disk and the text on screen matches the file. The edited range of the file is rewritten.
+1. **The page's own HTML file.** Used when the page is an `.html` or `.htm` file on disk and the text on screen matches the file. The edited range of the file is rewritten. A `<br>` tag with no attributes counts as part of the text, so it can be added and removed.
 2. **A search of the source files.** Used for everything else: pages rendered by a development server, and text a script put on the page. Editdesk searches the root folder for the old text and rewrites the match.
 
 The search accepts the spellings a character can have in source code. `Don't` on screen matches `Don\'t`, `Don&apos;t` and `Don&#39;t`. Line breaks and indentation between words are ignored.
@@ -60,6 +60,8 @@ What the search does with a match depends on the code around it.
 | Words in a `.md`, `.markdown` or `.txt` file                                                                                                              | Saves             | As typed, except `<`, which becomes `&lt;`                                                                                                                                                                                                |
 | Part of something longer, a quoted string in any other kind of file, or an attribute value in an HTML file                                                | Asks first        | As typed. Refused when the new text contains anything other than letters, numbers, spaces and `. , ! ? ; : ( ) - – — ’ … % / @ # + * =`. In `.yaml` and `.yml` files only letters, numbers, spaces and `. , ! ? ( ) – — ’ …` are accepted |
 | Inside a longer word or a code identifier                                                                                                                 | Ignores the match |                                                                                                                                                                                                                                           |
+
+A new line is written as `\n` in a string, `&#10;` in an attribute value, `<br />` between tags (`<br>` in `.html` and `.htm` files) and `<br>` in Markdown. The search finds all of these spellings. In a string or an attribute value, a new line is saved only when the page shows line breaks in that text. The [editing guide](editing.md#new-lines-and-paragraphs) has the rule.
 
 When the text matches in one place, Editdesk saves there. When it matches in several, Editdesk asks which one.
 

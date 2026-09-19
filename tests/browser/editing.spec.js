@@ -327,3 +327,90 @@ test("criterion: the keyboard undo shortcut undoes typing inside bold text", asy
   await page.keyboard.press("ControlOrMeta+z");
   await expect(page.locator("#intro strong")).toHaveText("by hand");
 });
+
+test("criterion: Shift+Enter adds a line break, saved as a br tag, and editing carries on", async ({
+  page,
+}) => {
+  await page.locator("#headline").click();
+  await page.locator("#headline").evaluate((element) => {
+    const text = /** @type {Text} */ (element.firstChild);
+    getSelection()?.collapse(text, "Fresh bread,".length);
+  });
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("now ");
+  await expect(page.locator("#headline")).toHaveAttribute(
+    "contenteditable",
+    "plaintext-only",
+  );
+  await page.keyboard.press("Enter");
+  await expect(status(page)).toHaveText(/Saved to index\.html/);
+  expect(await site.read("index.html")).toBe(
+    (await site.original("index.html")).replace(
+      "Fresh bread, baked",
+      "Fresh bread,<br>now baked",
+    ),
+  );
+
+  await editAtEnd(page.locator("#headline"));
+  await page.keyboard.type("!");
+  await page.keyboard.press("Enter");
+  await expect
+    .poll(() => site.read("index.html"))
+    .toContain("<br>now baked every morning!</h1>");
+});
+
+test("criterion: a line break at the very end of the text shows a new line to type on, and saves no stray break", async ({
+  page,
+}) => {
+  await editAtEnd(page.locator("#headline"));
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("Daily");
+  await page.keyboard.press("Enter");
+  await expect(status(page)).toHaveText(/Saved/);
+  expect(await site.read("index.html")).toContain(
+    "baked every morning<br>Daily</h1>",
+  );
+});
+
+test("criterion: Shift+Enter twice splits a paragraph in the file, and Undo joins it again", async ({
+  page,
+}) => {
+  await page.locator("#about-text").click();
+  await page.locator("#about-text").evaluate((element) => {
+    const text = /** @type {Text} */ (element.firstChild);
+    getSelection()?.collapse(text, "Two bakers.".length);
+  });
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.press("Enter");
+  await expect(status(page)).toHaveText(/Saved to index\.html/);
+  expect(await site.read("index.html")).toContain(
+    '<p id="about-text" class="note">Two bakers.</p>\n      <p class="note">One very old oven.</p>',
+  );
+  await expect(page.locator("p.note")).toHaveCount(2);
+
+  await page
+    .locator("editdesk-toolbar")
+    .getByRole("button", { name: "Undo" })
+    .click();
+  await expect(status(page)).toHaveText("Undone");
+  await expect(page.locator("p.note")).toHaveCount(1);
+  expect(await site.read("index.html")).toBe(await site.original("index.html"));
+});
+
+test("criterion: Backspace removes a line break that was already in the file", async ({
+  page,
+}) => {
+  await page.locator("#address").click();
+  await page.locator("#address").evaluate((element) => {
+    const text = /** @type {Text} */ (element.lastChild);
+    getSelection()?.collapse(text, 0);
+  });
+  await page.keyboard.press("Backspace");
+  await page.keyboard.type(", ");
+  await page.keyboard.press("Enter");
+  await expect(status(page)).toHaveText(/Saved/);
+  expect(await site.read("index.html")).toContain(
+    '<p id="address">1 Harbour Road, Tofino</p>',
+  );
+});

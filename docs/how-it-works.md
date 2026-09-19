@@ -1,6 +1,6 @@
 ---
 title: How it works
-nav_order: 5
+nav_order: 6
 ---
 
 # How it works
@@ -34,7 +34,7 @@ The editor sets `contenteditable="plaintext-only"` on the clicked element and re
 Only text may change. The editor refuses input that would add or remove an element, and handles two cases by hand where browsers would otherwise restructure the page:
 
 - Typing over or deleting all the text of a bold or a link would remove the element. The editor changes the text and keeps the element
-- Typing at the very start or end of a link would put the text outside the link. The editor inserts it inside. The keyboard undo shortcut does not cover text inserted this way
+- Typing at the very start or end of a link would put the text outside the link. The editor inserts it inside. The keyboard undo shortcut does not cover text inserted this way, or new lines
 
 After each input the editor checks that the elements under the edited one are the same elements in the same order. If not, it puts the last good state back.
 
@@ -44,11 +44,13 @@ Text is addressed by slot. An element's slots are the gaps before, between and a
 
 The editor and the server divide elements the same way, so "slot 1 of element 12" names the same place in the page and in the file.
 
+A `<br>` tag with no attributes is part of the text, not a divider. Inside an edit, a line break travels as the Unicode line separator (U+2028) and a paragraph break as the paragraph separator (U+2029). Ordinary copy never contains them. Each writer turns them into its own spelling: `<br>`, `<br />`, `\n`, or the end and start tags that split a paragraph.
+
 ## Saving to an HTML file
 
 1. When the server sends an HTML file to the browser, it parses the file with [parse5](https://github.com/inikulin/parse5), which reports the position of every tag. It adds a `data-editdesk-el` number to each element whose text maps exactly to the file. The file on disk is not changed.
 2. An edit names the element number, the slot, the old text and the new text.
-3. The server parses the file again, finds that slot and checks that it still shows the old text. If it does, the server rewrites that range. **Undo** and **Redo** of such an edit are only ever written to that slot.
+3. The server parses the file again, finds that slot and checks that it still shows the old text. If it does, the server rewrites that range.
 
 Inside the range, only the characters that differ are replaced. The raw text is split into units, one per character, entity or line ending. Units outside the changed part are copied as they were, which keeps `&mdash;`, `&nbsp;` and Windows line endings intact.
 
@@ -57,6 +59,10 @@ An element is left without a number when its text does not map exactly, for exam
 ## Saving by search
 
 When there is no HTML file for the page, or the slot does not match, the server searches the root folder for the old text. The [command reference](reference.md#where-an-edit-is-saved) lists how each kind of match is treated. A match is rewritten word by word: words the edit did not change keep their original spelling and line wrapping.
+
+## Undo and redo
+
+The server remembers the contents of the file before and after each saved edit, for the latest 200 edits. **Undo** writes the earlier contents back, and only when the file still holds exactly what the edit left. This works the same for every kind of edit, and survives the page loading again. The history is kept in memory and ends when Editdesk stops.
 
 ## Decisions
 

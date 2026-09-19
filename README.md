@@ -8,17 +8,25 @@ Editdesk is a command-line tool. It runs a small server on your computer, opens 
 
 ## Install
 
-Editdesk needs [Node.js](https://nodejs.org) 20.19 or newer. There is nothing else to install. Run it with `npx`:
+Editdesk needs [Node.js](https://nodejs.org) 20.19 or newer.
 
-```bash
-npx github:Up-Coast/editdesk page.html
-```
+1. Install the `editdesk` command:
 
-To install the `editdesk` command permanently:
+   ```bash
+   npm install --global editdesk
+   ```
 
-```bash
-npm install --global github:Up-Coast/editdesk
-```
+2. Check it:
+
+   ```bash
+   editdesk --version
+   ```
+
+To try it without installing, run `npx editdesk page.html`. The [install page](docs/install.md) covers updating and removing it.
+
+### Working offline
+
+An installed Editdesk works with no internet connection. The server and the editor both run from your computer, load nothing from the internet and send nothing anywhere. A page that loads its own fonts or scripts from the internet shows its fallbacks while you are offline, and editing still works. `npx` downloads from the npm registry, so use the installed command when offline.
 
 ## Use
 
@@ -37,7 +45,7 @@ npm install --global github:Up-Coast/editdesk
    ```
 
 2. Click any text and type.
-3. Press Enter, or click somewhere else, to save. Press Esc to cancel.
+3. Press Enter, or click somewhere else, to save. Press Shift+Enter for a new line, twice for a new paragraph. Press Esc to cancel.
 
 The toolbar shows the file and line the edit was saved to. **Undo** and **Redo** change the file back and forth. Switch to **Browse** to follow links and press buttons, then back to **Edit**.
 
@@ -53,6 +61,7 @@ Editdesk never guesses. When it cannot tell where text comes from, it puts the o
 
 ## Read more
 
+- [Install](docs/install.md): installing, working offline, updating and removing
 - [Editing guide](docs/editing.md): everything the editor does
 - [Command reference](docs/reference.md): targets, options, and which files are read and written
 - [When an edit is not saved](docs/troubleshooting.md): each message and what to do

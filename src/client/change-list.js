@@ -7,7 +7,7 @@ import { strings } from "./strings.js";
 
 /**
  * Combines repeated edits of the same text into one change each.
- * @param {import("./history.js").HistoryEntry[]} entries Edits in effect, oldest first.
+ * @param {import("./keepers.js").KeptEdit[]} entries Edits in effect, oldest first.
  * @returns {{ page: string, oldText: string, newText: string }[]} One change per edited text that ended up different.
  */
 export function summarizeChanges(entries) {
@@ -30,7 +30,7 @@ export function summarizeChanges(entries) {
 
 /**
  * Writes the change list as plain text.
- * @param {import("./history.js").HistoryEntry[]} entries Edits in effect, oldest first.
+ * @param {import("./keepers.js").KeptEdit[]} entries Edits in effect, oldest first.
  * @returns {string} Old and new text for every change, grouped by page.
  */
 export function formatChangeList(entries) {

@@ -8,7 +8,10 @@
  */
 
 import {
+  breakCharacterOf,
   captureTree,
+  createParagraphMarker,
+  isDivider,
   listDividers,
   readSlots,
   restoreTree,
@@ -83,10 +86,20 @@ export function findEditableHost(target) {
  * @param {object} callbacks
  * @param {() => void} callbacks.onRefusedInput Called when input is refused because it would remove formatting.
  * @param {() => void} callbacks.onEnter Called when the person presses Enter, which ends the edit instead of adding a line.
- * @returns {{ host: HTMLElement, commit: () => SlotChange[], cancel: () => void }} The session.
+ * @param {boolean} canSplit True when a second line break in a row may become a paragraph break.
+ * @returns {{ host: HTMLElement, commit: () => SlotChange[], cancel: () => void, insertBreak: () => void }} The session.
  */
-export function startEditingSession(host, point, { onRefusedInput, onEnter }) {
-  const elements = [host, ...host.querySelectorAll("*")];
+export function startEditingSession(
+  host,
+  point,
+  { onRefusedInput, onEnter },
+  canSplit,
+) {
+  const elements = [host, ...host.querySelectorAll("*")].filter(
+    (element) => breakCharacterOf(element) === null,
+  );
+  /** @type {HTMLBRElement | null} A `br` that only keeps the caret visible on a new last line. */
+  let placeholder = null;
   const originalSlots = new Map(
     elements.map((element) => [element, readSlots(element)]),
   );
@@ -135,6 +148,8 @@ export function startEditingSession(host, point, { onRefusedInput, onEnter }) {
   }
 
   function end() {
+    placeholder?.remove();
+    placeholder = null;
     host.removeEventListener("beforeinput", guardInput);
     host.removeEventListener("input", keepOrRestoreStructure);
     restoreAttribute(
@@ -159,8 +174,46 @@ export function startEditingSession(host, point, { onRefusedInput, onEnter }) {
   host.focus({ preventScroll: true });
   placeCaret(point);
 
+  /**
+   * Adds a line break at the caret. A second one in a row, in the text of a
+   * paragraph that can be split, becomes a paragraph break.
+   */
+  function insertBreak() {
+    const selection = getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    if (!selection || !range || !host.contains(range.commonAncestorContainer)) {
+      return;
+    }
+    if (rangeContainsDivider(range)) {
+      onRefusedInput();
+      return;
+    }
+    range.deleteContents();
+    dropSpacesAroundCaret(range);
+    const before = nodeBeforeCaret(range);
+    const added =
+      canSplit && before?.parentNode === host && before instanceof HTMLBRElement
+        ? createParagraphMarker()
+        : document.createElement("br");
+    if (added instanceof HTMLBRElement) {
+      range.insertNode(added);
+    } else {
+      before?.replaceWith(added);
+    }
+    if (!hasContentAfter(added)) {
+      placeholder?.remove();
+      placeholder = document.createElement("br");
+      added.after(placeholder);
+    }
+    const caret = document.createRange();
+    caret.setStartAfter(added);
+    selection.collapse(caret.startContainer, caret.startOffset);
+    host.dispatchEvent(new InputEvent("input", { bubbles: true }));
+  }
+
   return {
     host,
+    insertBreak,
     commit() {
       end();
       /** @type {SlotChange[]} */
@@ -201,23 +254,90 @@ export function startEditingSession(host, point, { onRefusedInput, onEnter }) {
 }
 
 /**
+ * Says whether a range reaches across a divider, so that deleting it would
+ * remove formatting.
  * @param {AbstractRange} range
  */
 function rangeContainsDivider(range) {
   if (range.startContainer === range.endContainer) {
-    return false;
+    return containsDivider(range);
   }
+  const owner = (/** @type {Node} */ container) =>
+    container instanceof Text ? container.parentNode : container;
+  return (
+    owner(range.startContainer) !== owner(range.endContainer) ||
+    containsDivider(range)
+  );
+}
+
+/**
+ * @param {AbstractRange} range
+ */
+function containsDivider(range) {
   const live = document.createRange();
   live.setStart(range.startContainer, range.startOffset);
   live.setEnd(range.endContainer, range.endOffset);
-  const contents = live.cloneContents();
-  return (
-    contents.querySelector("*") !== null ||
-    [...contents.childNodes].some(
-      (node) => node.nodeType === Node.COMMENT_NODE,
-    ) ||
-    range.startContainer.parentNode !== range.endContainer.parentNode
+  const walker = document.createTreeWalker(
+    live.cloneContents(),
+    NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_COMMENT,
   );
+  while (walker.nextNode()) {
+    if (isDivider(walker.currentNode)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Removes the spaces on both sides of the caret, so a break put between two
+ * words leaves no space at the end of one line or the start of the next.
+ * @param {Range} range A collapsed range; moved to stay at the same place in the text.
+ */
+function dropSpacesAroundCaret(range) {
+  const node = range.startContainer;
+  if (!(node instanceof Text)) {
+    return;
+  }
+  const before = node.data.slice(0, range.startOffset).replace(/[ \t]+$/, "");
+  const after = node.data.slice(range.startOffset).replace(/^[ \t]+/, "");
+  node.data = before + after;
+  range.setStart(node, before.length);
+  range.collapse(true);
+}
+
+/**
+ * Returns the node that ends just before a collapsed range, skipping empty
+ * text nodes, or null when text or nothing comes before it.
+ * @param {Range} range
+ * @returns {ChildNode | null}
+ */
+function nodeBeforeCaret(range) {
+  const { startContainer, startOffset } = range;
+  if (startContainer instanceof Text && startOffset > 0) {
+    return null;
+  }
+  let node =
+    startContainer instanceof Text
+      ? startContainer.previousSibling
+      : (startContainer.childNodes[startOffset - 1] ?? null);
+  while (node instanceof Text && node.length === 0) {
+    node = node.previousSibling;
+  }
+  return node;
+}
+
+/**
+ * Says whether anything that shows on the page follows a node inside its parent.
+ * @param {Node} node
+ */
+function hasContentAfter(node) {
+  for (let next = node.nextSibling; next; next = next.nextSibling) {
+    if (!(next instanceof Text) || /\S/.test(next.data)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
