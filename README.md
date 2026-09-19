@@ -13,7 +13,7 @@ Editdesk needs [Node.js](https://nodejs.org) 20.19 or newer.
 1. Install the `editdesk` command:
 
    ```bash
-   npm install --global editdesk
+   npm install --global github:Up-Coast/editdesk
    ```
 
 2. Check it:
@@ -22,11 +22,11 @@ Editdesk needs [Node.js](https://nodejs.org) 20.19 or newer.
    editdesk --version
    ```
 
-To try it without installing, run `npx editdesk page.html`. The [install page](docs/install.md) covers updating and removing it.
+To try it without installing, run `npx github:Up-Coast/editdesk page.html`. The [install page](docs/install.md) covers updating and removing it.
 
 ### Working offline
 
-An installed Editdesk works with no internet connection. The server and the editor both run from your computer, load nothing from the internet and send nothing anywhere. A page that loads its own fonts or scripts from the internet shows its fallbacks while you are offline, and editing still works. `npx` downloads from the npm registry, so use the installed command when offline.
+An installed Editdesk works with no internet connection. The server and the editor both run from your computer, load nothing from the internet and send nothing anywhere. A page that loads its own fonts or scripts from the internet shows its fallbacks while you are offline, and editing still works. `npx` downloads Editdesk each time, so use the installed command when offline.
 
 ## Use
 

@@ -15,7 +15,7 @@ Editdesk lets you change the words on a web page by clicking them and typing, th
 2. Install Editdesk:
 
    ```bash
-   npm install --global editdesk
+   npm install --global github:Up-Coast/editdesk
    ```
 
 3. Open a page:

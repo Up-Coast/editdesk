@@ -10,15 +10,15 @@ Editdesk needs [Node.js](https://nodejs.org) 20.19 or newer. It runs on macOS, W
 ## Try it without installing
 
 ```bash
-npx editdesk page.html
+npx github:Up-Coast/editdesk page.html
 ```
 
-`npx` downloads Editdesk from the npm registry, so this needs the internet.
+`npx` downloads Editdesk from GitHub, so this needs the internet.
 
 ## Install it
 
 ```bash
-npm install --global editdesk
+npm install --global github:Up-Coast/editdesk
 ```
 
 Then run it from any folder:
@@ -47,7 +47,7 @@ Use the installed command when offline, not `npx`.
 ## Update
 
 ```bash
-npm install --global editdesk@latest
+npm install --global github:Up-Coast/editdesk
 ```
 
 ```bash

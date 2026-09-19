@@ -4,13 +4,13 @@
 
 ## 0.2.0 — 2026-09-18
 
-New lines and paragraphs, and Editdesk is on npm.
+New lines and paragraphs, a fuller undo, and an install page.
 
 ### Added
 
 - **Shift+Enter adds a new line, and pressing it twice adds a new paragraph.** Enter still saves. In an HTML file a new line is a `<br>` tag and a new paragraph splits the `<p>` or `<li>`, keeping its class. In an app's source a new line is `<br />` between tags or `\n` in a string. See https://up-coast.github.io/editdesk/editing.html
 - **Existing line breaks can be removed.** Put the caret after the break and press Backspace.
-- **Install from npm.** Run `npm install --global editdesk`. An installed Editdesk works offline. See https://up-coast.github.io/editdesk/install.html
+- **Install page, with offline use.** Run `npm install --global github:Up-Coast/editdesk`. An installed Editdesk works with no internet connection. See https://up-coast.github.io/editdesk/install.html
 
 ### Changed
 
@@ -22,7 +22,7 @@ New lines and paragraphs, and Editdesk is on npm.
 
 ### Upgrading
 
-Run `npm install --global editdesk`. If you installed from GitHub, remove that copy first with `npm uninstall --global editdesk`.
+Run `npm install --global github:Up-Coast/editdesk`.
 
 ## 0.1.0 — 2026-09-18
 
