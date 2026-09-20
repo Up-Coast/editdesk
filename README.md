@@ -69,6 +69,16 @@ Editdesk never guesses. When it cannot tell where text comes from, it puts the o
 - [Contributing](CONTRIBUTING.md): setup, tests and the checks a change must pass
 - [Changelog](CHANGELOG.md)
 
+## Who makes Editdesk, and why it is free
+
+I'm Abbey Jackson. I spent over a decade in tech as an iOS engineer and then a product manager, at Intel, Mastercard and Rivian, where I hold a patent ([US12115931B2](https://patents.google.com/patent/US12115931B2/en)) for the architecture behind how the Rivian app talks to the vehicle.
+
+Editdesk exists because of the people I teach. Most of them are not in tech: they have an app idea, they are building it themselves or with one other person, and they should not have to ask an AI or a developer to fix a typo on their own page.
+
+The rest of my work is the same idea at a bigger scale. From Passion to Product is my free six-week live course on app strategy: working out who has the problem, talking to the people who have it, deciding what to build, and planning a launch. No coding, no-code or AI skills are needed to take it. It is run by [Up Coast](https://www.upcoastbuilders.ca), my social venture, and it is free because I think the ability to build things people want should not depend on already being inside the tech industry.
+
+There are no dates for the next cohort yet. The waitlist and the course details are at [upcoastbuilders.ca](https://www.upcoastbuilders.ca).
+
 ## License
 
 MIT. See [LICENSE](LICENSE).
